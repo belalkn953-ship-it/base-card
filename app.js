@@ -8,12 +8,14 @@ function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 const requiredFields={game_id:'اختر اللعبة أولًا',package_id:'اختر الباقة أولًا',player_id:'اكتب Player ID أولًا',customer_name:'اكتب اسم العميل أولًا'};
 Object.entries(requiredFields).forEach(([n,m])=>{const el=document.querySelector(`[name="${n}"]`);if(el){el.addEventListener('invalid',()=>el.setCustomValidity(m));el.addEventListener('input',()=>el.setCustomValidity(''));el.addEventListener('change',()=>el.setCustomValidity(''))}});
 function money(n,c){return c==='SYP'?`${Number(n||0).toLocaleString('ar-SY')} ل.س`:`${Number(n||0).toFixed(2)} $`}
+function whatsappNumber(v){let n=String(v||'').replace(/\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.startsWith('0'))n='963'+n.slice(1);else if(!n.startsWith('963'))n='963'+n;return n}
 async function loadConfig(){
  const [s,g,p]=await Promise.all([sb.from('settings').select('key,value'),sb.from('games').select('*').eq('visible',true).order('sort_order'),sb.from('packages').select('*,games!inner(visible)').eq('visible',true).eq('games.visible',true).order('sort_order')]);
  if(s.error||g.error||p.error)throw new Error('تعذر تحميل بيانات الموقع');
  config={settings:Object.fromEntries((s.data||[]).map(x=>[x.key,x.value])),games:g.data||[],packages:p.data||[]};
  const x=config.settings; $('#brandName').textContent=x.site_name||'Base Card';$('#footerName').textContent=x.site_name||'Base Card';$('#brandTagline').textContent=x.tagline||'';$('#heroTitle').innerHTML=(x.hero_title||'خلّ لعبك أقوى مع Base Card').replace('Base Card','<span>Base Card</span>');$('#heroText').textContent=x.hero_text||'';$('#offerTitle').textContent=x.offer_title||'عرض الأسبوع';$('#offerText').textContent=x.offer_text||'';if($('#paymentInfo'))$('#paymentInfo').textContent=x.sham_cash||'اشحن رصيدك من قسم شراء النقاط أولًا.';if($('#walletPaymentInfo'))$('#walletPaymentInfo').textContent=x.sham_cash||'سيتم عرض بيانات شام كاش هنا بعد ضبطها من لوحة الإدارة.';
  if(x.sham_cash_qr&&$('#paymentQr')&&$('#qrBox')){$('#paymentQr').src=x.sham_cash_qr;$('#qrBox').classList.remove('hidden')}
+ const wa=whatsappNumber(x.support_whatsapp);if(wa&&$('#whatsappLink')){$('#whatsappLink').href=`https://wa.me/${wa}`;$('#whatsappLink').target='_blank';if($('#whatsappNumber'))$('#whatsappNumber').textContent=x.support_whatsapp||''}
  const grid=$('#gamesGrid');grid.innerHTML='';config.games.forEach(g=>grid.insertAdjacentHTML('beforeend',`<article class="game-card"><span class="badge">متوفر الآن</span><h3>${esc(g.icon)} ${esc(g.name)}</h3><p>${esc(g.description)}</p><a class="btn" href="#order" data-game="${g.id}">شحن ${esc(g.name)} ←</a><span class="emoji">${esc(g.icon)}</span></article>`));
  const gs=$('#gameId');gs.innerHTML='<option value="">اختر اللعبة</option>'+config.games.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('');
 }
