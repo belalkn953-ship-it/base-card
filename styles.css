@@ -7,3 +7,5 @@ body:has(#shop:target) #sectionHome,body:has(#wallet:target) #sectionHome,body:h
 .landing-visual .hero-tiles{position:relative;inset:auto;grid-template-columns:repeat(2,1fr);align-items:stretch}
 .landing-visual .hero-tiles div,.landing-visual .hero-tiles div:nth-child(2),.landing-visual .hero-tiles div:nth-child(3){position:relative;transform:none!important;justify-content:flex-start;min-height:82px;height:auto;gap:7px;overflow:hidden}
 @media(max-width:560px){.landing-visual .hero-tiles div{min-height:74px;font-size:20px;padding:11px}}
+/* Native hash fallback: tapping a section still opens it even when scripts are blocked. */
+main>[data-main-section]{display:none}main>#sectionHome{display:block}main>#shop:target,main>#shop:target~#order{display:block!important}main>#wallet:target,main>#wallet:target~#topup{display:block!important}main>#track:target,main>#support:target{display:block!important}
