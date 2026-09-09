@@ -7,10 +7,11 @@ const KM_PROXY='kmcard-proxy';
 // The screenshot-verified target is KM Card product 276. KM's live name contains
 // "SERVER 2", but the provider ID/category/price identify the Global package;
 // keep the ID for ordering while exposing only the approved public label.
-const KM_FREE_FIRE_110={id:276,name:'Free Fire 110 جوهرة',price:131.714403,provider_price_syp:131.714403,sale_price_syp:145,category_name:'FREE FIRE GLOBAL',params:['أيدي اللاعب'],available:true,product_type:'package'};
-const KM_FREE_FIRE_IDS=[276,913,14,20,23,27,31,34];
-const KM_FREE_FIRE_PUBLIC={276:'Free Fire 110 جوهرة',913:'Free Fire 210+21',14:'Free Fire 583 جوهرة',20:'Free Fire 1166 جوهرة',23:'Free Fire 2398 جوهرة',27:'العضوية الأسبوعية',31:'العضوية الشهرية',34:'Booyah Pass'};
-const KM_FREE_FIRE_SALE={276:145,913:300,14:750,20:1500,23:3000,27:235,31:1600,34:550};
+// KM 954 is the verified Free Fire Global 110 (100+10 bonus). ID 276 is Server 2 and is never exposed.
+const KM_FREE_FIRE_110={id:954,name:'Free Fire 110 (100+10)',price:116.6829,provider_price_syp:116.6829,sale_price_syp:145,category_name:'FREE FIRE GLOBAL',params:['ايدي اللاعب'],available:true,product_type:'package'};
+const KM_FREE_FIRE_IDS=[954,913,14,20,23,27,31,34];
+const KM_FREE_FIRE_PUBLIC={954:'Free Fire 110 (100+10)',913:'Free Fire 210+21',14:'Free Fire 583 جوهرة',20:'Free Fire 1166 جوهرة',23:'Free Fire 2398 جوهرة',27:'العضوية الأسبوعية',31:'العضوية الشهرية',34:'Booyah Pass'};
+const KM_FREE_FIRE_SALE={954:145,913:300,14:750,20:1500,23:3000,27:235,31:1600,34:550};
 // Verified KM Card fallback entries for the approved PUBG Global catalogue.
 const KM_PUBG_GLOBAL_FALLBACK=[
  {id:114,name:'Pubg Mobile 60 UC',price:122.7023649,provider_price_syp:122.7023649,category_name:'PUBG GLOBAL',params:['User ID'],available:true,product_type:'package'},
