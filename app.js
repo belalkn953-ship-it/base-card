@@ -21,7 +21,7 @@ async function loadConfig(){
  const [s,g,p]=await Promise.all([sb.from('settings').select('key,value'),sb.from('games').select('*').eq('visible',true).order('sort_order'),sb.from('packages').select('*,games!inner(visible)').eq('visible',true).eq('games.visible',true).order('sort_order')]);
  let sec={data:[]}; try { sec=await sb.from('site_sections').select('*').eq('visible',true).order('sort_order').order('id'); } catch (_) {}
  if(s.error||g.error||p.error)throw new Error('تعذر تحميل بيانات الموقع');
- config={settings:Object.fromEntries((s.data||[]).map(x=>[x.key,x.value])),games:g.data||[],packages:p.data||[],sections:sec.data||[]};
+ config={settings:Object.fromEntries((s.data||[]).map(x=>[x.key,x.value])),games:g.data||[],packages:p.data||[],sections:sec.data||[]};window.__baseSettings=config.settings;
  loadDynamicSections(config.sections);
  const x=config.settings;if($('#brandName'))$('#brandName').textContent=x.site_name||'Base Card';if($('#brandTagline'))$('#brandTagline').textContent=x.tagline||'';if($('#paymentInfo'))$('#paymentInfo').textContent=x.sham_cash||'اشحن رصيدك من قسم شراء النقاط أولًا.';if($('#walletPaymentInfo'))$('#walletPaymentInfo').textContent=x.sham_cash||'سيتم عرض بيانات شام كاش هنا بعد ضبطها من لوحة الإدارة.';
  if(x.sham_cash_qr&&$('#paymentQr')&&$('#qrBox')){$('#paymentQr').src=x.sham_cash_qr;$('#qrBox').classList.remove('hidden')}
