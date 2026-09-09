@@ -1,2 +1,3 @@
 window.SUPABASE_URL = 'https://pdasckmtdpffbyooiqak.supabase.co';
 window.SUPABASE_ANON_KEY = 'sb_publishable_Z6vSURgHGiI08wPNZSUb2g_SZzWa5qj';
+window.addEventListener('DOMContentLoaded',function(){document.addEventListener('click',async function(e){const a=e.target.closest('#googleLogin');if(!a)return;e.preventDefault();try{const r=await window.supabase.createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY).auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});if(r.error)throw r.error}catch(err){console.error(err);alert('تعذر فتح تسجيل الدخول عبر Google');}});});
