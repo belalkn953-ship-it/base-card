@@ -18,8 +18,9 @@ Object.entries(requiredFields).forEach(([n,m])=>{const el=document.querySelector
 function money(n,c){return c==='SYP'?`${Number(n||0).toLocaleString('ar-SY')} ل.س`:`${Number(n||0).toFixed(2)} $`}
 function whatsappNumber(v){let n=String(v||'').replace(/\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.startsWith('0'))n='963'+n.slice(1);else if(!n.startsWith('963'))n='963'+n;return n}
 async function loadConfig(){
- const [s,g,p,sec]=await Promise.all([sb.from('settings').select('key,value'),sb.from('games').select('*').eq('visible',true).order('sort_order'),sb.from('packages').select('*,games!inner(visible)').eq('visible',true).eq('games.visible',true).order('sort_order'),sb.from('site_sections').select('*').eq('visible',true).order('sort_order').order('id')]);
- if(s.error||g.error||p.error||sec.error)throw new Error('تعذر تحميل بيانات الموقع');
+ const [s,g,p]=await Promise.all([sb.from('settings').select('key,value'),sb.from('games').select('*').eq('visible',true).order('sort_order'),sb.from('packages').select('*,games!inner(visible)').eq('visible',true).eq('games.visible',true).order('sort_order')]);
+ let sec={data:[]}; try { sec=await sb.from('site_sections').select('*').eq('visible',true).order('sort_order').order('id'); } catch (_) {}
+ if(s.error||g.error||p.error)throw new Error('تعذر تحميل بيانات الموقع');
  config={settings:Object.fromEntries((s.data||[]).map(x=>[x.key,x.value])),games:g.data||[],packages:p.data||[],sections:sec.data||[]};
  loadDynamicSections(config.sections);
  const x=config.settings;if($('#brandName'))$('#brandName').textContent=x.site_name||'Base Card';if($('#brandTagline'))$('#brandTagline').textContent=x.tagline||'';if($('#paymentInfo'))$('#paymentInfo').textContent=x.sham_cash||'اشحن رصيدك من قسم شراء النقاط أولًا.';if($('#walletPaymentInfo'))$('#walletPaymentInfo').textContent=x.sham_cash||'سيتم عرض بيانات شام كاش هنا بعد ضبطها من لوحة الإدارة.';
