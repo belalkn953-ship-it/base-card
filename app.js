@@ -1,7 +1,7 @@
 const {createClient}=window.supabase;
 const sb=createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY);
 const $=s=>document.querySelector(s);
-let config={games:[],packages:[],settings:{}}, currentUser=null;
+let config={games:[{id:9001,name:'Free Fire Global',description:'شحن الجواهر',icon:'🔥',visible:true},{id:9002,name:'PUBG Global',description:'شحن الشدات',icon:'🎯',visible:true}],packages:[],settings:{}}, currentUser=null;
 let kmGameCatalog=[];
 const KM_PROXY='kmcard-proxy';
 // The screenshot-verified target is KM Card product 276. KM's live name contains
@@ -23,6 +23,8 @@ const KM_PUBG_GLOBAL_FALLBACK=[
 ];
 function normalizeKmGameProduct(p){const id=Number(p?.id); if(!KM_FREE_FIRE_IDS.includes(id)) return p; return {...p,category_name:'FREE FIRE GLOBAL',name:KM_FREE_FIRE_PUBLIC[id]||p.name,provider_price_syp:Number(p.price),sale_price_syp:KM_FREE_FIRE_SALE[id]||Number(p.sale_price_syp||p.price),...(id===276?KM_FREE_FIRE_110:{})};}
 const isKmGame=g=>/free\s*fire|فري\s*فاير/i.test(String(g?.name||''))?'FREE FIRE GLOBAL':/pubg|ببجي/i.test(String(g?.name||''))?'PUBG GLOBAL':'';
+// Render the two approved games before remote tables resolve, so the authenticated order form never starts empty.
+const initialGameSelect=$('#gameId');if(initialGameSelect)initialGameSelect.innerHTML='<option value="">اختر اللعبة</option>'+config.games.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('');
 function extractKmProducts(raw){const seen=new Set();function walk(v,d=0){if(d>8||v==null)return[];if(Array.isArray(v))return v.filter(x=>x&&typeof x==='object'&&x.id!=null);if(typeof v!=='object'||seen.has(v))return[];seen.add(v);for(const k of ['products','items','results','data','result','payload']){if(v[k]!=null){const a=walk(v[k],d+1);if(a.length)return a}}return[]}return walk(raw)}
 async function loadKmGameCatalog(){
   let live=[];try{const r=await sb.functions.invoke(KM_PROXY,{body:{action:'products'}});if(!r.error)live=extractKmProducts(r.data);}catch(_){}
