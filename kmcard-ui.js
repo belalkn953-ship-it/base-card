@@ -8,7 +8,6 @@ const PROVIDER={4:'Syriatel',11:'MTN'};
 // Fixed denominations supplied by KM Card for product 11 (MTN) and 4 (Syriatel).
 // Keep these fixed: do not derive denominations or prices from USD conversion.
 const TRANSFER_QTY={11:['10','12','15','20','25','30','35','40','50','60','70','85','90','100','110','150','170','190','200','230','260','280','300','320','340','360','400','420','440','460','480','500','550','600','650','700','750','1000','1500','2000','2500','3000','3500','3600','4500','4800','5000','5500','6000','7200'],4:['1.92','2.88','3.84','4.8','5.76','9.61','20.19','23.07','24.03','25.96','30.76','40.38','45.19','48.07','52.88','62.5','68.26','72.11','77.88','81.73','86.53','96.15','100.96','105.76','115.38','130.76','144.23','160.57','163.46','173.07','183.65','192.3','211.53','240.38','288.46','317.3','370.19','432.69','480.76','576.92','721.15','769.23','951.92']};
-const TRANSFER_MARGIN_SYP=10;
 const isTransfer=p=>Object.prototype.hasOwnProperty.call(PROVIDER,Number(p?.id));
 const isChat=p=>!isTransfer(p)&&(Number(p?.parent_id)===6||/(chat|whatsapp|telegram|messenger|live|hiyoo|migo|fancy|tango|yalla|party|discord|imo|viber|دردشة|شات|تطبيقات الدردشة)/i.test(text(p)));
 const state={products:[],groups:{chat:[]},selectedProvider:null};
@@ -20,7 +19,7 @@ function ensureSections(){
 }
 function group(list){const m=new Map();list.forEach(p=>{const n=String(p.category_name||p.parent_name||p.category?.name||p.parent?.name||p.name||'KM Card').trim();if(!m.has(n))m.set(n,[]);m.get(n).push(p)});return [...m].map(([name,products])=>({name,products}));}
 function overrides(){let raw=window.__baseSettings?.km_sale_prices,map={};try{map=typeof raw==='string'?JSON.parse(raw||'{}'):(raw||{})}catch(_){}return map}
-function comparablePrice(p,q){const map=overrides();for(const k of [`${p.id}:${q}`,`${p.id}_${q}`,`${p.id}-${q}`]){const n=Number(map[k]);if(Number.isFinite(n)&&n>=0)return n+TRANSFER_MARGIN_SYP}const v=p?.sale_price_syp??p?.comparable_price_syp??p?.provider_price_syp??p?.amount_syp;const n=Number(v);return v!==undefined&&v!==''&&Number.isFinite(n)?n+TRANSFER_MARGIN_SYP:null}
+function comparablePrice(p,q){const map=overrides();for(const k of [`${p.id}:${q}`,`${p.id}_${q}`,`${p.id}-${q}`]){const n=Number(map[k]);if(Number.isFinite(n)&&n>=0)return n}const v=p?.sale_price_syp??p?.comparable_price_syp??p?.provider_price_syp??p?.amount_syp??p?.price_syp??p?.price_amount;const n=Number(v);return v!==undefined&&v!==''&&Number.isFinite(n)?n:null}
 function qtyValues(p){return TRANSFER_QTY[Number(p?.id)]||[];}
 function priceText(p,q){const n=comparablePrice(p,q);return n==null?'السعر يحدده المشرف من لوحة الإدارة':`${n.toLocaleString('ar-SY')} ل.س جديدة`}
 function packageCard(p,q){return `<button type="button" class="package-card km-package" data-km-id="${Number(p.id)}" data-qty="${kmEsc(q??'')}" data-provider="${kmEsc(PROVIDER[Number(p.id)]||'')}"><span class="package-icon">📱</span><span class="package-name">${kmEsc(q??p.name||'باقة')} رصيد</span><span class="package-price">${priceText(p,q)}</span><span class="package-check">✓</span></button>`}
