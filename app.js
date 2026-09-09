@@ -1,6 +1,12 @@
 
-// Existing wallet, order, tracking and support flows retained.
-function updatePrice(){const p=config.packages.find(x=>x.id===Number($('#packageId').value));if($('#orderPrice'))$('#orderPrice').textContent=p?`سيتم خصم ${money(p.price_amount??p.price,p.currency)} من محفظتك عند إرسال الطلب.`:'سيتم خصم قيمة الباقة من محفظتك عند إرسال الطلب.';if($('#orderPriceUsd'))$('#orderPriceUsd').textContent=p?.price_usd?`السعر بالدولار: $${Number(p.price_usd).toFixed(2)}`:''}
-async function loadWallet(){if(!currentUser)return;const w=await sb.from('wallets').select('*').eq('user_id',currentUser.id).maybeSingle();const x=w.data||{balance_usd:0,balance_syp:0};if($('#balanceUsd'))$('#balanceUsd').textContent=money(x.balance_usd,'USD');if($('#balanceSyp'))$('#balanceSyp').textContent=money(x.balance_syp,'SYP')}
-$('#orderForm')?.addEventListener('submit',async e=>{e.preventDefault();try{const {data:u}=await sb.auth.getUser();if(!u.user)throw Error('سجّل الدخول عبر Google أولًا قبل الشراء');const f=new FormData(e.target);if(!f.get('package_id'))throw Error('اختر الباقة أولًا');const r=await sb.rpc('purchase_with_wallet',{p_game_id:Number(f.get('game_id')),p_package_id:Number(f.get('package_id')),p_player_id:f.get('player_id'),p_customer_name:f.get('customer_name')});if(r.error)throw r.error;show('#orderAlert',`تم إنشاء الطلب بنجاح. رقم طلبك: ${r.data.order_number}`,'success');await loadWallet()}catch(err){show('#orderAlert',err.message||'تعذر تنفيذ الطلب','error')}});
-$('#trackForm')?.addEventListener('submit',async e=>{e.preventDefault();const n=$('#trackNumber').value.trim();const r=await sb.from('orders').select('order_number,status,created_at,updated_at,games(name),packages(name)').eq('order_number',n).maybeSingle();if(r.error||!r.data)return show('#trackAlert','لم يتم العثور على هذا الطلب','error');const d=r.data;show('#trackAlert',`الحالة: ${d.status} — ${d.games?.name||''} — ${d.packages?.name||''}`,'success')});
+
+// Google login handler
+document.addEventListener('click', async function(e){
+  const link=e.target.closest('#googleLogin');
+  if(!link)return;
+  e.preventDefault();
+  try{
+    const result=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:window.location.origin+window.location.pathname}});
+    if(result.error) throw result.error;
+  }catch(err){console.error('Google login error',err);flashMessage('تعذر فتح تسجيل الدخول عبر Google');}
+});
