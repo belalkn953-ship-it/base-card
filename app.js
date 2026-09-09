@@ -29,7 +29,12 @@ function whatsappNumber(v){let n=String(v||'').replace(/\D/g,'');if(n.startsWith
 async function loadConfig(){
  const [s,g,p]=await Promise.all([sb.from('settings').select('key,value'),sb.from('games').select('*').eq('visible',true).order('sort_order'),sb.from('packages').select('*,games!inner(visible)').eq('visible',true).eq('games.visible',true).order('sort_order')]);
  let sec={data:[]}; try { sec=await sb.from('site_sections').select('*').eq('visible',true).order('sort_order').order('id'); } catch (_) {}
- if(s.error||g.error||p.error)throw new Error('تعذر تحميل بيانات الموقع');
+ if(s.error||g.error||p.error){
+  // Keep the authenticated order form usable when a non-catalog table is temporarily unavailable.
+  // KM product IDs/prices still come only from the verified provider/local catalog below.
+  if(g.error||!(g.data||[]).length) g.data=[{id:9001,name:'Free Fire Global',description:'شحن الجواهر',icon:'🔥',visible:true},{id:9002,name:'PUBG Global',description:'شحن الشدات',icon:'🎯',visible:true}];
+  if(p.error) p.data=[];
+ }
  config={settings:Object.fromEntries((s.data||[]).map(x=>[x.key,x.value])),games:g.data||[],packages:p.data||[],sections:sec.data||[]};window.__baseSettings=config.settings;
  loadDynamicSections(config.sections);
  const x=config.settings;if($('#brandName'))$('#brandName').textContent=x.site_name||'Base Card';if($('#brandTagline'))$('#brandTagline').textContent=x.tagline||'';if($('#paymentInfo'))$('#paymentInfo').textContent=x.sham_cash||'اشحن رصيدك من قسم شراء النقاط أولًا.';if($('#walletPaymentInfo'))$('#walletPaymentInfo').textContent=x.sham_cash||'سيتم عرض بيانات شام كاش هنا بعد ضبطها من لوحة الإدارة.';
