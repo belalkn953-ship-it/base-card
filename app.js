@@ -15,6 +15,7 @@ async function loadKmGameCatalog(){
   if(!kmGameCatalog.length) kmGameCatalog=typeof LOCAL_KM_GAME_CATALOG!=='undefined'?LOCAL_KM_GAME_CATALOG:[];
   // Exclude other Server 2 entries, but retain the screenshot-verified target ID 276.
   kmGameCatalog=kmGameCatalog.map(normalizeKmGameProduct).filter(p=>p&&p.available!==false&&(Number(p.id)===276||!/server\s*[_-]?2|سيرفر\s*2/i.test(String(p.name||'')+' '+String(p.category_name||''))));
+  if(!kmGameCatalog.some(p=>Number(p.id)===276)) kmGameCatalog.push(KM_FREE_FIRE_110);
   if($('#gameId')?.value) fillPackages();
 }
 function kmPackageFor(id){return kmGameCatalog.find(p=>Number(p.id)===Number(id));}
