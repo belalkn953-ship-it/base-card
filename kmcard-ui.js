@@ -16,7 +16,7 @@ function ensureSections(){
  const back=km$('#sectionBack'); if(!back)return;
  if(!km$('#chatapps'))back.insertAdjacentHTML('afterend','<section id="chatapps" class="section" data-main-section="chatapps"><div class="container"><div class="section-title"><div><label>KM Card</label><h2>تطبيقات الدردشة</h2></div><p>اختر التطبيق لعرض الباقات.</p></div><div id="chatappsGrid" class="games-grid"><div class="panel km-status">جارٍ تحميل تطبيقات الدردشة...</div></div></div></section>');
  if(!km$('#transfer'))back.insertAdjacentHTML('afterend','<section id="transfer" class="section" data-main-section="transfer"><div class="container"><div class="section-title"><div><label>KM Card</label><h2>تحويل الرصيد</h2></div><p>اختر سيريتل أو MTN لعرض باقاتهما المباشرة.</p></div><div id="transferGrid" class="games-grid"></div><div id="transferFormPanel" class="panel hidden" style="margin-top:16px"></div></div></section>');
- if(typeof sectionNames!=='undefined'){sectionNames.chatapps='تطبيقات الدردشة';sectionNames.transfer='تحويل الرصيد';sectionTargets.chatapps='chatapps';sectionTargets.transfer='transfer';}
+ if(typeof sectionNames!=='undefined'){sectionNames.chatapps='تطبيقات الدردشة';sectionNames.transfer='تحويل الرصيد';if(typeof sectionTargets!=='undefined'){sectionTargets.chatapps='chatapps';sectionTargets.transfer='transfer';}}
 }
 function group(list){const m=new Map();list.forEach(p=>{const n=String(p.category_name||p.parent_name||p.category?.name||p.parent?.name||p.name||'KM Card').trim();if(!m.has(n))m.set(n,[]);m.get(n).push(p)});return [...m].map(([name,products])=>({name,products}));}
 function overrides(){let raw=window.__baseSettings?.km_sale_prices,map={};try{map=typeof raw==='string'?JSON.parse(raw||'{}'):(raw||{})}catch(_){}return map}
