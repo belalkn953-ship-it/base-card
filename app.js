@@ -4,11 +4,17 @@ const $=s=>document.querySelector(s);
 let config={games:[],packages:[],settings:{}}, currentUser=null;
 let kmGameCatalog=[];
 const KM_PROXY='kmcard-proxy';
+// The screenshot-verified target is KM Card product 276. KM's live name contains
+// "SERVER 2", but the provider ID/category/price identify the Global package;
+// keep the ID for ordering while exposing only the approved public label.
+const KM_FREE_FIRE_110={id:276,name:'Free Fire 110 جوهرة',price:131.714403,provider_price_syp:131.714403,category_name:'FREE FIRE GLOBAL',params:['أيدي اللاعب'],available:true,product_type:'package'};
+function normalizeKmGameProduct(p){return Number(p?.id)===276?{...p,...KM_FREE_FIRE_110}:p}
 const isKmGame=g=>/free\s*fire|فري\s*فاير/i.test(String(g?.name||''))?'FREE FIRE GLOBAL':/pubg|ببجي/i.test(String(g?.name||''))?'PUBG GLOBAL':'';
 async function loadKmGameCatalog(){
   try{const r=await sb.functions.invoke(KM_PROXY,{body:{action:'products'}}); const raw=r.data||{}; const list=Array.isArray(raw)?raw:(raw.products||raw.data||[]); if(!r.error&&list.length) kmGameCatalog=list;}catch(_){}
   if(!kmGameCatalog.length) kmGameCatalog=typeof LOCAL_KM_GAME_CATALOG!=='undefined'?LOCAL_KM_GAME_CATALOG:[];
-  kmGameCatalog=kmGameCatalog.filter(p=>p&&p.available!==false&&!/server\s*[_-]?2|سيرفر\s*2/i.test(String(p.name||'')+' '+String(p.category_name||'')));
+  // Exclude other Server 2 entries, but retain the screenshot-verified target ID 276.
+  kmGameCatalog=kmGameCatalog.map(normalizeKmGameProduct).filter(p=>p&&p.available!==false&&(Number(p.id)===276||!/server\s*[_-]?2|سيرفر\s*2/i.test(String(p.name||'')+' '+String(p.category_name||''))));
   if($('#gameId')?.value) fillPackages();
 }
 function kmPackageFor(id){return kmGameCatalog.find(p=>Number(p.id)===Number(id));}
