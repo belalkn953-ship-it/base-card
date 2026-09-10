@@ -61,7 +61,7 @@ async function loadConfig(){
   if(g.error||!(g.data||[]).length) g.data=[{id:9001,name:'Free Fire Global',description:'شحن الجواهر',icon:'🔥',visible:true},{id:9002,name:'PUBG Global',description:'شحن الشدات',icon:'🎯',visible:true}];
   if(p.error) p.data=[];
  }
- config={settings:Object.fromEntries((s.data||[]).map(x=>[x.key,x.value])),games:g.data||[],packages:p.data||[],sections:sec.data||[]};window.__baseSettings=config.settings;
+ config={settings:Object.fromEntries((s.data||[]).map(x=>[x.key,x.value])),games:g.data||[],packages:p.data||[],sections:sec.data||[]};window.__baseSettings=config.settings;window.dispatchEvent(new Event('base-settings-ready'));
  loadDynamicSections(config.sections);
  const x=config.settings;if($('#brandName'))$('#brandName').textContent=x.site_name||'Base Card';if($('#brandTagline'))$('#brandTagline').textContent=x.tagline||'';if($('#paymentInfo'))$('#paymentInfo').textContent=x.sham_cash||'اشحن رصيدك من قسم شراء النقاط أولًا.';if($('#walletPaymentInfo'))$('#walletPaymentInfo').textContent=x.sham_cash||'سيتم عرض بيانات شام كاش هنا بعد ضبطها من لوحة الإدارة.';
  if(x.sham_cash_qr&&$('#paymentQr')&&$('#qrBox')){$('#paymentQr').src=x.sham_cash_qr;$('#qrBox').classList.remove('hidden')}
