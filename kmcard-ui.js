@@ -20,7 +20,7 @@ function ensureSections(){
 }
 function group(list){const m=new Map();list.forEach(p=>{const n=String(p.category_name||p.parent_name||p.category?.name||p.parent?.name||p.name||'KM Card').trim();if(!m.has(n))m.set(n,[]);m.get(n).push(p)});return [...m].map(([name,products])=>({name,products}));}
 function overrides(){let raw=window.__baseSettings?.km_sale_prices ?? window.config?.settings?.km_sale_prices,map={};try{map=typeof raw==='string'?JSON.parse(raw||'{}'):(raw||{})}catch(_){}return map}
-function comparablePrice(p,q){const map=overrides();for(const k of [`${p.id}:${q}`,`${p.id}_${q}`,`${p.id}-${q}`]){const n=Number(map[k]);if(Number.isFinite(n)&&n>=0)return n}const v=p?.sale_price_syp??p?.comparable_price_syp??p?.provider_price_syp??p?.amount_syp??p?.price_syp??p?.price_amount;const n=Number(v);return v!==undefined&&v!==''&&Number.isFinite(n)?n:null}
+function comparablePrice(p,q){const map=overrides();for(const k of [`${p.id}:${q}`,`${p.id}_${q}`,`${p.id}-${q}`]){const n=Number(map[k]);if(Number.isFinite(n)&&n>=0)return n}const v=p?.sale_price_syp??p?.comparable_price_syp??p?.provider_price_syp??p?.amount_syp??p?.price_syp??p?.price_amount;const n=Number(v);if(v!==undefined&&v!==''&&Number.isFinite(n))return n;const unit=Number(p?.price);const qty=Number(q);return isTransfer(p)&&Number.isFinite(unit)&&Number.isFinite(qty)?Math.ceil(unit*qty+5):null}
 function qtyValues(p){return TRANSFER_QTY[Number(p?.id)]||[];}
 function priceText(p,q){const n=comparablePrice(p,q);return n==null?'السعر يحدده المشرف من لوحة الإدارة':`${n.toLocaleString('ar-SY')} ل.س جديدة`}
 function packageCard(p,q){return `<button type="button" class="package-card km-package" data-km-id="${Number(p.id)}" data-qty="${kmEsc(q??'')}" data-provider="${kmEsc(PROVIDER[Number(p.id)]||'')}"><span class="package-icon">📱</span><span class="package-name">${kmEsc(q??p.name||'باقة')} رصيد</span><span class="package-price">${priceText(p,q)}</span><span class="package-check">✓</span></button>`}
@@ -28,7 +28,7 @@ function providerCard(provider){return `<button type="button" class="game-card k
 function draw(){const cg=km$('#chatappsGrid'),tg=km$('#transferGrid');if(cg)cg.innerHTML=state.groups.chat.length?state.groups.chat.map(g=>`<button type="button" class="game-card km-group" data-km-group="${kmEsc(g.name)}"><span class="badge">متوفر الآن</span><h3>💬 ${kmEsc(g.name)}</h3><p>${g.products.length} باقة متاحة</p><span class="btn">عرض الباقات ←</span></button>`).join(''):'<div class="panel km-status error">لم يعثر مزود الخدمة على تطبيقات دردشة متاحة حاليًا.</div>';if(tg){tg.innerHTML=providerCard('Syriatel')+providerCard('MTN');tg.querySelectorAll('.km-provider').forEach(el=>el.addEventListener('click',()=>showTransfer(el.dataset.provider)))}}
 function showTransfer(provider){
  provider=provider==='MTN'?'MTN':'Syriatel'; state.selectedProvider=provider;
- const id=provider==='MTN'?11:4,p=state.products.find(x=>Number(x.id)===id)||{id};
+ const id=provider==='MTN'?11:4,p=state.products.find(x=>Number(x.id)===id)||{id,price:provider==='MTN'?1.138517265:1.1372781};
  let panel=km$('#transferFormPanel'); if(!panel){const section=km$('#transfer');if(!section)return;panel=document.createElement('div');panel.id='transferFormPanel';panel.className='panel';section.querySelector('.container').appendChild(panel)}
  const cards=qtyValues(p).map(q=>packageCard(p,q)).join('');
  panel.classList.remove('hidden','section-hidden');panel.style.display='block';
