@@ -27,7 +27,7 @@ function qtyValues(p){return TRANSFER_QTY[Number(p?.id)]||[];}
 function priceText(p,q){const n=comparablePrice(p,q);return n==null?'السعر يحدده المشرف من لوحة الإدارة':`${n.toLocaleString('ar-SY')} ل.س جديدة`}
 function packageCard(p,q){return `<button type="button" class="package-card km-package" data-km-id="${Number(p.id)}" data-qty="${kmEsc(q??'')}" data-provider="${kmEsc(PROVIDER[Number(p.id)]||'')}"><span class="package-icon">📱</span><span class="package-name">${kmEsc(q??p.name||'باقة')} رصيد</span><span class="package-price">${priceText(p,q)}</span><span class="package-check">✓</span></button>`}
 function providerCard(provider){return `<button type="button" class="game-card km-provider" data-provider="${provider}" aria-label="عرض باقات ${provider}"><span class="badge">متوفر الآن</span><h3>📱 ${provider==='MTN'?'MTN':'سيريتل'}</h3><p>باقات التحويل المباشر لـ ${provider==='MTN'?'MTN':'سيريتل'} فقط</p><span class="btn">عرض الباقات ←</span></button>`}
-function draw(){const cg=km$('#chatappsGrid'),tg=km$('#transferGrid');if(cg)cg.innerHTML=state.groups.chat.length?state.groups.chat.map(g=>`<button type="button" class="game-card km-group" data-km-group="${kmEsc(g.name)}"><span class="badge">متوفر الآن</span><h3>💬 ${kmEsc(g.name)}</h3><p>${g.products.length} باقة متاحة</p><span class="btn">عرض الباقات ←</span></button>`).join(''):'<div class="panel km-status error">لم يعثر مزود الخدمة على تطبيقات دردشة متاحة حاليًا.</div>';if(tg){const ok4=state.products.some(x=>Number(x.id)===4),ok11=state.products.some(x=>Number(x.id)===11);tg.innerHTML=(ok4?providerCard('Syriatel'):'')+(ok11?providerCard('MTN'):'')||'<div class="panel km-status error">لا توجد منتجات تحويل مدعومة حاليًا.</div>'}}
+function draw(){const cg=km$('#chatappsGrid'),tg=km$('#transferGrid');if(cg)cg.innerHTML=state.groups.chat.length?state.groups.chat.map(g=>`<button type="button" class="game-card km-group" data-km-group="${kmEsc(g.name)}"><span class="badge">متوفر الآن</span><h3>💬 ${kmEsc(g.name)}</h3><p>${g.products.length} باقة متاحة</p><span class="btn">عرض الباقات ←</span></button>`).join(''):'<div class="panel km-status error">لم يعثر مزود الخدمة على تطبيقات دردشة متاحة حاليًا.</div>';if(tg){const ok4=state.products.some(x=>Number(x.id)===4)||!!FALLBACK_TRANSFER[4],ok11=state.products.some(x=>Number(x.id)===11)||!!FALLBACK_TRANSFER[11];tg.innerHTML=(ok4?providerCard('Syriatel'):'')+(ok11?providerCard('MTN'):'')||'<div class="panel km-status error">لا توجد منتجات تحويل مدعومة حاليًا.</div>'}}
 async function submitKmOrder(p,qty,params,note,button){
  if(!p||!p.id){note.textContent='الباقة غير متاحة حاليًا.';return}
  button.disabled=true; note.textContent='جارٍ إنشاء الطلب وخصم الرصيد...';
@@ -49,7 +49,7 @@ async function submitKmOrder(p,qty,params,note,button){
 }
 function showTransfer(provider){
  provider=provider==='MTN'?'MTN':'Syriatel'; state.selectedProvider=provider;
- const id=provider==='MTN'?11:4,p=state.products.find(x=>Number(x.id)===id);
+ const id=provider==='MTN'?11:4,p=state.products.find(x=>Number(x.id)===id)||FALLBACK_TRANSFER[id];
  let panel=km$('#transferFormPanel'); if(!panel)return;
  if(!p){panel.innerHTML='<p class="km-status error">منتج التحويل غير متاح حاليًا من KM Card.</p>';panel.classList.remove('hidden');return}
  const cards=qtyValues(p).map(q=>packageCard(p,q)).join(''); panel.classList.remove('hidden','section-hidden');panel.style.display='block';
