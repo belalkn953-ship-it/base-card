@@ -22,8 +22,9 @@ const KM_PUBG_GLOBAL_FALLBACK=[
  {id:119,name:'Pubg Mobile 6000+2100 UC',price:11438.35605,provider_price_syp:11438.35605,category_name:'PUBG GLOBAL',params:['User ID'],available:true,product_type:'package'},
  {id:996,name:'Pubg Mobile 6000+2100 UC (تلقائي)',price:11438.35605,provider_price_syp:11438.35605,category_name:'PUBG GLOBAL',params:['ايدي اللاعب'],available:true,product_type:'package'}
 ];
-function normalizeKmGameProduct(p){const id=Number(p?.id); if(!KM_FREE_FIRE_IDS.includes(id)) return p; return {...p,category_name:'FREE FIRE GLOBAL',name:KM_FREE_FIRE_PUBLIC[id]||p.name,provider_price_syp:Number(p.price),sale_price_syp:KM_FREE_FIRE_SALE[id]||Number(p.sale_price_syp||p.price),...(id===276?{id:276,name:'Free Fire 110 (100+10)',params:['أيدي اللاعب'],price:132.1087575,provider_price_syp:132.1087575,sale_price_syp:145,category_name:'FREE FIRE GLOBAL',available:true,product_type:'package'}:{})};}
+function normalizeKmGameProduct(p){const id=Number(p?.id); if(!KM_FREE_FIRE_IDS.includes(id)) return p; return {...p,category_name:'FREE FIRE GLOBAL',name:KM_FREE_FIRE_PUBLIC[id]||p.name,provider_price_syp:Number(p.price),sale_price_syp:kmSaleFor(id,KM_FREE_FIRE_SALE[id]||Number(p.sale_price_syp||p.price)),...(id===276?{id:276,name:'Free Fire 110 (100+10)',params:['أيدي اللاعب'],price:132.1087575,provider_price_syp:132.1087575,sale_price_syp:kmSaleFor(276,145),category_name:'FREE FIRE GLOBAL',available:true,product_type:'package'}:{})};}
 const isKmGame=g=>/free\s*fire|فري\s*فاير/i.test(String(g?.name||''))?'FREE FIRE GLOBAL':/pubg|ببجي/i.test(String(g?.name||''))?'PUBG GLOBAL':'';
+function kmSaleFor(id,fallback){let raw=config?.settings?.km_sale_prices,map={};try{map=typeof raw==='string'?JSON.parse(raw||'{}'):(raw||{})}catch(_){}const n=Number(map[String(id)+':1']??map[String(id)]??fallback);return Number.isFinite(n)?n:fallback;}
 // Render the two approved games before remote tables resolve, so the authenticated order form never starts empty.
 const initialGameSelect=$('#gameId');if(initialGameSelect)initialGameSelect.innerHTML='<option value="">اختر اللعبة</option>'+config.games.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('');
 function extractKmProducts(raw){const seen=new Set();function walk(v,d=0){if(d>8||v==null)return[];if(Array.isArray(v))return v.filter(x=>x&&typeof x==='object'&&x.id!=null);if(typeof v!=='object'||seen.has(v))return[];seen.add(v);for(const k of ['products','items','results','data','result','payload']){if(v[k]!=null){const a=walk(v[k],d+1);if(a.length)return a}}return[]}return walk(raw)}
@@ -33,7 +34,7 @@ async function loadKmGameCatalog(){
   if(!kmGameCatalog.length) kmGameCatalog=(typeof LOCAL_KM_GAME_CATALOG!=='undefined'?LOCAL_KM_GAME_CATALOG:[]).concat(KM_PUBG_GLOBAL_FALLBACK);
   // Exclude other Server 2 entries, but retain the screenshot-verified target ID 276.
   kmGameCatalog=kmGameCatalog.map(normalizeKmGameProduct).filter(p=>p&&p.available!==false&&(KM_FREE_FIRE_IDS.includes(Number(p.id))||!/server\s*[_-]?2|سيرفر\s*2/i.test(String(p.name||'')+' '+String(p.category_name||''))));
-  if(!kmGameCatalog.some(p=>Number(p.id)===276)) kmGameCatalog.push({id:276,name:'Free Fire 110 (100+10)',price:132.1087575,provider_price_syp:132.1087575,sale_price_syp:145,category_name:'FREE FIRE GLOBAL',params:['أيدي اللاعب'],available:true,product_type:'package'});
+  if(!kmGameCatalog.some(p=>Number(p.id)===276)) kmGameCatalog.push({id:276,name:'Free Fire 110 (100+10)',price:132.1087575,provider_price_syp:132.1087575,sale_price_syp:kmSaleFor(276,145),category_name:'FREE FIRE GLOBAL',params:['أيدي اللاعب'],available:true,product_type:'package'});
   if(!kmGameCatalog.some(p=>String(p.category_name||'').trim().toUpperCase()==='PUBG GLOBAL')) kmGameCatalog.push(...KM_PUBG_GLOBAL_FALLBACK);
   if($('#gameId')?.value) fillPackages();
 }
