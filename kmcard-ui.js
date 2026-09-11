@@ -44,6 +44,6 @@ async function invokeCatalogue(){let invokeError='';try{if(typeof sb!=='undefine
 ensureSections();
 // Render provider choices immediately so the transfer catalog remains usable while KM Card/API loads.
 draw();
-document.addEventListener('click',e=>{const pr=e.target.closest?.('.km-provider');if(pr){e.preventDefault();e.stopPropagation();showTransfer(pr.dataset.provider);return}const g=e.target.closest?.('.km-group');if(g){e.preventDefault();const x=state.groups.chat.find(v=>v.name===g.dataset.kmGroup);if(x)showChat(x);return}const p=e.target.closest?.('.km-package');if(p)document.querySelectorAll('.km-package').forEach(x=>x.classList.toggle('selected',x===p))},true);
+function selectKmPackage(e){const p=e.target.closest?.('.km-package');if(p){e.preventDefault();document.querySelectorAll('.km-package').forEach(x=>x.classList.toggle('selected',x===p));p.setAttribute('aria-pressed','true')}}document.addEventListener('pointerdown',selectKmPackage,true);document.addEventListener('click',e=>{const pr=e.target.closest?.('.km-provider');if(pr){e.preventDefault();e.stopPropagation();showTransfer(pr.dataset.provider);return}const g=e.target.closest?.('.km-group');if(g){e.preventDefault();const x=state.groups.chat.find(v=>v.name===g.dataset.kmGroup);if(x)showChat(x);return}const p=e.target.closest?.('.km-package');if(p)document.querySelectorAll('.km-package').forEach(x=>x.classList.toggle('selected',x===p))},true);
 load();
 })();
