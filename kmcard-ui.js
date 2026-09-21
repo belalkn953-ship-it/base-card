@@ -21,7 +21,7 @@ function ensureSections(){
 }
 function group(list){const m=new Map();list.forEach(p=>{const n=String(p.category_name||p.parent_name||p.category?.name||p.parent?.name||p.name||'KM Card').trim();if(!m.has(n))m.set(n,[]);m.get(n).push(p)});return [...m].map(([name,products])=>({name,products}));}
 function overrides(){let raw=window.__baseSettings?.km_sale_prices,map={};try{map=typeof raw==='string'?JSON.parse(raw||'{}'):(raw||{})}catch(_){}return map}
-function comparablePrice(p,q){const map=overrides();for(const k of [`${p.id}:${q}`,`${p.id}_${q}`,`${p.id}-${q}`]){const n=Number(map[k]);if(Number.isFinite(n)&&n>=0)return n}const v=p?.sale_price_syp??p?.comparable_price_syp??p?.provider_price_syp??p?.amount_syp;const n=Number(v);return v!==undefined&&v!==''&&Number.isFinite(n)?n+TRANSFER_MARGIN_SYP:null}
+function comparablePrice(p,q){const map=overrides();for(const k of [`${p.id}:${q}`,`${p.id}_${q}`,`${p.id}-${q}`]){const n=Number(map[k]);if(Number.isFinite(n)&&n>=0)return n}const v=p?.sale_price_syp??p?.comparable_price_syp??p?.provider_price_syp??p?.amount_syp;const n=Number(v);return v!==undefined&&v!==''&&Number.isFinite(n)?n:null}
 function qtyValues(p){return TRANSFER_QTY[Number(p?.id)]||[];}
 function priceText(p,q){const n=comparablePrice(p,q);return n==null?'السعر يحدده المشرف من لوحة الإدارة':`${n.toLocaleString('ar-SY')} ل.س جديدة`}
 function packageCard(p,q){return `<button type="button" class="package-card km-package" data-km-id="${Number(p.id)}" data-qty="${kmEsc(q??'')}" data-provider="${kmEsc(PROVIDER[Number(p.id)]||'')}"><span class="package-icon">📱</span><span class="package-name">${kmEsc(q??p.name||'باقة')} رصيد</span><span class="package-price">${priceText(p,q)}</span><span class="package-check">✓</span></button>`}
@@ -48,7 +48,7 @@ async function submitKmOrder(p,qty,params,note,button){
 }
 function showTransfer(provider){
  provider=provider==='MTN'?'MTN':'Syriatel'; state.selectedProvider=provider;
- const id=provider==='MTN'?11:4,p=state.products.find(x=>Number(x.id)===id);
+ const id=provider==='MTN'?11:4,p=state.products.find(x=>Number(x.id)===id)||{id,name:provider,params:['phone']};
  let panel=km$('#transferFormPanel'); if(!panel)return;
  if(!p){panel.innerHTML='<p class="km-status error">منتج التحويل غير متاح حاليًا من KM Card.</p>';panel.classList.remove('hidden');return}
  const cards=qtyValues(p).map(q=>packageCard(p,q)).join(''); panel.classList.remove('hidden','section-hidden');panel.style.display='block';
