@@ -9,8 +9,8 @@ const KM_PROXY='kmcard-proxy';
 // keep the ID for ordering while exposing only the approved public label.
 // KM 954 is the verified Free Fire Global 110 (100+10 bonus). ID 276 is Server 2 and is never exposed.
 const KM_FREE_FIRE_110={id:954,name:'Free Fire 110 (100+10)',price:116.6829,provider_price_syp:116.6829,sale_price_syp:145,category_name:'FREE FIRE GLOBAL',params:['ايدي اللاعب'],available:true,product_type:'package'};
-const KM_FREE_FIRE_IDS=[276,913,14,20,23,27,31,34,426,431,436,437,1104];
-const KM_FREE_FIRE_PUBLIC={954:'Free Fire 110 (100+10)',913:'Free Fire 210+21',14:'Free Fire 583 جوهرة',20:'Free Fire 1166 جوهرة',23:'Free Fire 2398 جوهرة',27:'العضوية الأسبوعية',31:'العضوية الشهرية',34:'Booyah Pass',426:'Level 6 Upgrade Pack',431:'Level 10 Upgrade Pack',436:'Level 20 Upgrade Pack',437:'Level 30 Upgrade Pack',1104:'حزمة ترقية المستوى 25'};
+const KM_FREE_FIRE_IDS=[1,14,20,23,277,276,913,954,950,951,953,27,31,34,426,431,436,437,1104];
+const KM_FREE_FIRE_PUBLIC={1:'Free Fire 100 Gems',950:'Free Fire 341 Gems',951:'Free Fire 572 Gems',953:'Free Fire 2398 Gems',954:'Free Fire 110 (100+10)',277:'Free Fire 231',913:'Free Fire 210+21',14:'Free Fire 583 جوهرة',20:'Free Fire 1166 جوهرة',23:'Free Fire 2398 جوهرة',27:'العضوية الأسبوعية',31:'العضوية الشهرية',34:'Booyah Pass',426:'Level 6 Upgrade Pack',431:'Level 10 Upgrade Pack',436:'Level 20 Upgrade Pack',437:'Level 30 Upgrade Pack',1104:'حزمة ترقية المستوى 25'};
 const KM_FREE_FIRE_SALE={276:135,913:300,14:750,20:1500,23:3000,27:235,31:1600,34:550};
 // Verified KM Card fallback entries for the approved PUBG Global catalogue.
 const KM_PUBG_GLOBAL_FALLBACK=[
