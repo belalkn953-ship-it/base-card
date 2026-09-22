@@ -36,7 +36,7 @@ async function submitKmOrder(p,qty,params,note,button){
   const r=await sb.functions.invoke(PROXY,{body:{action:'order',product:{id:Number(p.id),name:p.name,category_name:p.category_name,price:Number(p.price),params:p.params||[]},qty:Number(qty),params,idempotency_key}});
   if(r.error)throw Error(r.error.message||'تعذر إنشاء الطلب');if(r.data?.error)throw Error(r.data.error);
   let state=r.data?.status||'processing'; const id=r.data?.order_id;const recent=JSON.parse(localStorage.getItem('basecard_recent_km_orders')||'[]');recent.unshift({order_number:r.data?.order_number||'',source:'kmcard',status:state,provider_status:r.data?.provider_status||state,title:p.category_name||'KM Card',package_name:p.name,amount:Number(r.data?.charged_syp||0),currency:'SYP',created_at:new Date().toISOString()});localStorage.setItem('basecard_recent_km_orders',JSON.stringify(recent.filter(x=>x.order_number).slice(0,20)));
-  const successMsg=`تم إنشاء الطلب ${r.data?.order_number||''} — الحالة: ${state==='completed'?'مكتمل':state==='rejected'?'مرفوض وتم إرجاع الرصيد':'قيد المعالجة'}`;note.textContent=successMsg;if(typeof flashMessage==='function')flashMessage(successMsg,'success');
+  const successMsg=`تم إنشاء الطلب ${r.data?.order_number||''} — الحالة: ${state==='completed'?'مكتمل':state==='rejected'?'مرفوض وتم إرجاع الرصيد':'قيد المعالجة'}`;note.textContent=successMsg;if(typeof flashMessage==='function')flashMessage(successMsg,state==='rejected'?'error':'success');
   // Poll only this user's order; check is authenticated and refund is server-side/idempotent.
   if(id&&state!=='completed'&&state!=='rejected') for(let i=0;i<8;i++){
     await new Promise(res=>setTimeout(res,3000));
