@@ -5,7 +5,7 @@ let config={games:[{id:9001,name:'Free Fire Global',description:'شحن الجو
 let kmGameCatalog=[];
 const KM_PROXY='kmcard-proxy';
 // Approved Free Fire products. Keep this allowlist synchronized with km-game-catalog.js.
-const KM_FREE_FIRE_IDS=[276,277,14,20,23,426,431,436,437,1104];
+const KM_FREE_FIRE_IDS=[276,277,14,20,23,27,31,426,431,436,437,1104];
 const KM_FREE_FIRE_PUBLIC={1:'باقة 100 جوهرة',950:'باقة 341 جوهرة',951:'باقة 572 جوهرة',953:'باقة 2398 جوهرة',954:'باقة 110 جوهرة + بونص',277:'باقة 231 جوهرة',913:'باقة 210+21 جوهرة',14:'باقة 583 جوهرة',20:'باقة 1166 جوهرة',23:'باقة 2398 جوهرة',27:'العضوية الأسبوعية',31:'العضوية الشهرية',34:'بوياه باس',426:'باقة ترقية المستوى 6',431:'باقة ترقية المستوى 10',436:'باقة ترقية المستوى 20',437:'باقة ترقية المستوى 30',1104:'باقة ترقية المستوى 25'};
 const KM_FREE_FIRE_SALE={};
 // Verified KM Card fallback entries for the approved PUBG Global catalogue.
