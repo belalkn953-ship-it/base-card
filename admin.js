@@ -30,6 +30,8 @@ async function reviewTopup(id,decision){const note=prompt('ملاحظة الإد
 document.addEventListener('click',e=>{const b=e.target.closest('.review-topup');if(b)reviewTopup(b.dataset.id,b.dataset.decision)});
 function walletOf(x){return Array.isArray(x?.wallets)?(x.wallets[0]||{}):(x?.wallets||{})}
 function walletFormat(n,c){const v=Number(n||0);return c==='USD'?v.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+' $':v.toLocaleString('ar-SY',{maximumFractionDigits:2})+' ل.س جديدة'}
+function parseFlexibleAmount(value){let s=String(value??'').trim().replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[٬\s]/g,'').replace(/٫/g,'.');const comma=s.lastIndexOf(','),dot=s.lastIndexOf('.');if(comma>=0&&dot>=0){if(comma>dot)s=s.replace(/\./g,'').replace(/,/g,'.');else s=s.replace(/,/g,'')}else if(comma>=0){if(/^\d{1,3}(,\d{3})+$/.test(s))s=s.replace(/,/g,'');else if((s.match(/,/g)||[]).length===1)s=s.replace(',','.');else return NaN}else if((s.match(/\./g)||[]).length>1){if(/^\d{1,3}(?:\.\d{3})+$/.test(s))s=s.replace(/\./g,'');else return NaN}if(!/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(s))return NaN;return Number(s)}
+
 async function loadWallets(){
   const [r,rateResult]=await Promise.all([
     sb.from('profiles').select('id,email,name,role,wallets(balance_usd,balance_syp)').order('created_at',{ascending:false}),
@@ -46,7 +48,7 @@ async function loadWallets(){
 $('#refreshWallets')?.addEventListener('click',loadWallets);
 function rateText(v){return Number(v).toLocaleString('ar-SY',{maximumFractionDigits:2})}
 function updateExchangeRatePreview(){
-  const rate=Number($('#exchangeRateInput')?.value),preview=$('#exchangeRatePreview'),button=$('#saveExchangeRate'),valid=Number.isFinite(rate)&&rate>0&&rate<=100000;
+  const rate=parseFlexibleAmount($('#exchangeRateInput')?.value),preview=$('#exchangeRatePreview'),button=$('#saveExchangeRate'),valid=Number.isFinite(rate)&&rate>0&&rate<=100000;
   if(button)button.disabled=!valid;
   if(!preview)return;
   if(!valid){preview.textContent='أدخل سعرًا أكبر من صفر ولا يتجاوز 100,000 ل.س لكل دولار.';return}
@@ -69,7 +71,7 @@ async function loadExchangeRate(){
 }
 $('#exchangeRateInput')?.addEventListener('input',updateExchangeRatePreview);
 $('#exchangeRateForm')?.addEventListener('submit',async e=>{
-  e.preventDefault();const rate=Number($('#exchangeRateInput').value),button=$('#saveExchangeRate'),error=$('#exchangeRateError');
+  e.preventDefault();const rate=parseFlexibleAmount($('#exchangeRateInput').value),button=$('#saveExchangeRate'),error=$('#exchangeRateError');
   if(!Number.isFinite(rate)||rate<=0||rate>100000){if(error){error.textContent='أدخل سعرًا صحيحًا أكبر من صفر.';error.classList.remove('hidden')}return}
   button.disabled=true;button.textContent='جارٍ حفظ سعر الصرف…';if(error){error.textContent='';error.classList.add('hidden')}
   const r=await sb.from('settings').upsert({key:'usd_to_syp_rate',value:String(rate)});
@@ -88,7 +90,7 @@ function setWalletCurrency(value){
 }
 function setWalletOperation(value){walletOperation=value==='deduct'?'deduct':'add';document.querySelectorAll('[data-wallet-operation]').forEach(b=>b.classList.toggle('active',b.dataset.walletOperation===walletOperation));$('#walletAdjustSubmit').textContent=walletOperation==='add'?'تأكيد إضافة الرصيد':'تأكيد خصم الرصيد';updateWalletPreview()}
 function updateWalletPreview(){
-  const id=$('#walletEditUserId')?.value,user=walletRows.find(x=>String(x.id)===String(id)),w=walletOf(user||{}),current=Number(w.balance_syp||0),raw=$('#walletAdjustAmount')?.value||'',amount=Number(raw),factor=walletCurrency==='USD'?walletUsdRate:1,sign=walletOperation==='add'?1:-1,converted=Number.isFinite(factor)&&Number.isFinite(amount)?Math.round((amount*factor+Number.EPSILON)*100)/100:NaN,next=current+sign*converted;
+  const id=$('#walletEditUserId')?.value,user=walletRows.find(x=>String(x.id)===String(id)),w=walletOf(user||{}),current=Number(w.balance_syp||0),raw=$('#walletAdjustAmount')?.value||'',amount=parseFlexibleAmount(raw),factor=walletCurrency==='USD'?walletUsdRate:1,sign=walletOperation==='add'?1:-1,converted=Number.isFinite(factor)&&Number.isFinite(amount)?Math.round((amount*factor+Number.EPSILON)*100)/100:NaN,next=current+sign*converted;
   const error=$('#walletAdjustError'),submit=$('#walletAdjustSubmit');
   if(!raw||!Number.isFinite(amount)||amount<=0){$('#walletPreviewBalance').textContent=walletFormat(current,'SYP');$('#walletPreviewDelta').textContent='أدخل المبلغ لمعاينة الرصيد الجديد';error.textContent='';submit.disabled=true;return}
   if(!Number.isFinite(factor)||!Number.isFinite(converted)){error.textContent='تعذر قراءة سعر الصرف؛ لا يمكن تنفيذ التعديل بالدولار.';$('#walletPreviewBalance').textContent='—';submit.disabled=true;return}
@@ -107,7 +109,7 @@ $('#walletAdjustClose').addEventListener('click',closeWalletAdjust);$('#walletAd
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&$('#walletAdjustModal').classList.contains('open'))closeWalletAdjust()});
 document.addEventListener('click',e=>{const b=e.target.closest('.adjust-wallet');if(b){openWalletAdjust(b.dataset.id);return}const c=e.target.closest('[data-wallet-currency]');if(c){setWalletCurrency(c.dataset.walletCurrency);return}const o=e.target.closest('[data-wallet-operation]');if(o)setWalletOperation(o.dataset.walletOperation)});
 $('#walletAdjustForm').addEventListener('submit',async e=>{
-  e.preventDefault();const id=$('#walletEditUserId').value,amount=Number($('#walletAdjustAmount').value),signed=walletOperation==='add'?amount:-amount,note=$('#walletAdjustNote').value.trim()||'تعديل يدوي من الإدارة',btn=$('#walletAdjustSubmit');
+  e.preventDefault();const id=$('#walletEditUserId').value,amount=parseFlexibleAmount($('#walletAdjustAmount').value),signed=walletOperation==='add'?amount:-amount,note=$('#walletAdjustNote').value.trim()||'تعديل يدوي من الإدارة',btn=$('#walletAdjustSubmit');
   if(!id||!Number.isFinite(amount)||amount<=0){updateWalletPreview();return}
   btn.disabled=true;btn.textContent='جارٍ حفظ التعديل…';$('#walletAdjustError').textContent='';
   const r=await sb.rpc('admin_adjust_wallet',{p_user_id:id,p_amount:signed,p_currency:walletCurrency,p_note:note});
