@@ -41,7 +41,7 @@
         const date = payment.created_at
           ? new Date(payment.created_at).toLocaleString('ar-SY', { timeZone: 'Asia/Damascus' })
           : '—';
-        return `<article class="track-order payment-row">
+        return `<article class="track-order payment-row" style="padding:10px 12px;margin:8px 0;font-size:12px">
           <div><b>دفعة #${escapeHtml(payment.id)}</b><span class="status ${className}">${label}</span></div>
           <p>رقم العملية: ${escapeHtml(payment.payment_number || '—')}</p>
           <small>المبلغ: ${moneyText(payment.amount, payment.currency)}<br>التاريخ: ${escapeHtml(date)}</small>
