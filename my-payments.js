@@ -4,7 +4,9 @@
   const list = byId('myPaymentsList');
   const toggle = byId('myPaymentsToggle');
   const refresh = byId('myPaymentsRefresh');
-  if (!panel || !list || !toggle || !refresh) return;
+  const transactionsPanel = byId('walletTransactionsPanel');
+  const transactionsToggle = byId('walletTransactionsToggle');
+  if (!panel || !list || !toggle || !refresh || !transactionsPanel || !transactionsToggle) return;
 
   const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -52,11 +54,20 @@
     }
   }
 
+  function switchPanel(nextPanel, nextToggle) {
+    const opening = nextPanel.classList.contains('hidden');
+    [panel, transactionsPanel].forEach((item) => item.classList.add('hidden'));
+    [toggle, transactionsToggle].forEach((button) => button.setAttribute('aria-expanded', 'false'));
+    if (opening) {
+      nextPanel.classList.remove('hidden');
+      nextToggle.setAttribute('aria-expanded', 'true');
+    }
+    return opening;
+  }
+
   toggle.addEventListener('click', async () => {
-    const opening = panel.classList.contains('hidden');
-    panel.classList.toggle('hidden', !opening);
-    toggle.setAttribute('aria-expanded', String(opening));
-    if (opening) await loadPayments();
+    if (switchPanel(panel, toggle)) await loadPayments();
   });
+  transactionsToggle.addEventListener('click', () => switchPanel(transactionsPanel, transactionsToggle));
   refresh.addEventListener('click', loadPayments);
 })();
