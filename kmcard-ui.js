@@ -21,7 +21,7 @@ function ensureSections(){
 }
 function group(list){const m=new Map();list.forEach(p=>{const n=String(p.category_name||p.parent_name||p.category?.name||p.parent?.name||p.name||'خدمات الشحن').trim();if(!m.has(n))m.set(n,[]);m.get(n).push(p)});return [...m].map(([name,products])=>({name,products}));}
 function overrides(){let raw=window.__baseSettings?.km_sale_prices,map={};try{map=typeof raw==='string'?JSON.parse(raw||'{}'):(raw||{})}catch(_){}return map}
-function comparablePrice(p,q){const map=overrides();for(const k of [`${p.id}:${q}`,`${p.id}_${q}`,`${p.id}-${q}`]){const n=Number(map[k]);if(Number.isFinite(n)&&n>=0)return n}const v=p?.sale_price_syp??p?.comparable_price_syp??p?.provider_price_syp??p?.amount_syp;const n=Number(v);return v!==undefined&&v!==''&&Number.isFinite(n)?n:null}
+function comparablePrice(p,q){const map=overrides(),qty=q==null?'1':String(Number(q));for(const k of [`${p.id}:${qty}`,`${p.id}_${qty}`,`${p.id}-${qty}`,...(qty==='1'?[String(p.id)]:[])]){const n=Number(map[k]);if(Number.isFinite(n)&&n>0)return n}const n=Number(p?.sale_price_syp);return Number.isFinite(n)&&n>0?n:null}
 function qtyValues(p){return TRANSFER_QTY[Number(p?.id)]||[];}
 function priceText(p,q){const n=comparablePrice(p,q);return n==null?'السعر يحدده المشرف من لوحة الإدارة':`${n.toLocaleString('ar-SY')} ل.س جديدة`}
 function packageCard(p,q){return `<button type="button" class="package-card km-package" data-km-id="${Number(p.id)}" data-qty="${kmEsc(q??'')}" data-provider="${kmEsc(PROVIDER[Number(p.id)]||'')}"><span class="package-icon">📱</span><span class="package-name">${kmEsc(q??p.name||'باقة')} رصيد</span><span class="package-price">${priceText(p,q)}</span><span class="package-check">✓</span></button>`}
@@ -33,7 +33,7 @@ async function submitKmOrder(p,qty,params,note,button,toastDuration=2000){
  try{
   const auth=await sb.auth.getUser(); if(auth.error||!auth.data?.user)throw Error('سجّل الدخول عبر Google أولًا قبل الشراء');
   const idempotency_key=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`);
-  const r=await sb.functions.invoke(PROXY,{body:{action:'order',product:{id:Number(p.id),name:p.name,category_name:p.category_name,price:Number(p.price),params:p.params||[]},qty:Number(qty),params,idempotency_key}});
+  const r=await sb.functions.invoke(PROXY,{body:{action:'order',product:{id:Number(p.id),name:p.name,category_name:p.category_name,params:p.params||[]},qty:Number(qty),params,idempotency_key}});
   if(r.error)throw Error(r.error.message||'تعذر إنشاء الطلب');if(r.data?.error)throw Error(r.data.error);
   let state=r.data?.status||'processing'; const id=r.data?.order_id;const recent=JSON.parse(localStorage.getItem('basecard_recent_km_orders')||'[]');recent.unshift({order_number:r.data?.order_number||'',source:'kmcard',status:state,provider_status:r.data?.provider_status||state,title:kmEsc(p.category_name||'شحن الألعاب'),package_name:p.name,amount:Number(r.data?.charged_syp||0),currency:'SYP',created_at:new Date().toISOString()});localStorage.setItem('basecard_recent_km_orders',JSON.stringify(recent.filter(x=>x.order_number).slice(0,20)));
   const orderRef=r.data?.order_number||(toastDuration>2000?(r.data?.order_id||id||'—'):'');const successMsg=`تم إنشاء الطلب ${orderRef} — الحالة: ${state==='completed'?'مكتمل':state==='rejected'?'مرفوض وتم إرجاع الرصيد':'قيد المعالجة'}`;note.textContent=successMsg;if(typeof flashMessage==='function')flashMessage(successMsg,state==='rejected'?'error':'success',toastDuration);
