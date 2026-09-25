@@ -52,6 +52,9 @@ function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 const requiredFields={game_id:'اختر اللعبة أولًا',package_id:'اختر الباقة أولًا',player_id:'اكتب Player ID أولًا' };
 Object.entries(requiredFields).forEach(([n,m])=>{const el=document.querySelector(`[name="${n}"]`);if(el){el.addEventListener('invalid',()=>el.setCustomValidity(m));el.addEventListener('input',()=>el.setCustomValidity(''));el.addEventListener('change',()=>el.setCustomValidity(''))}});
 function money(n,c){return c==='SYP'?`${Number(n||0).toLocaleString('ar-SY')} ل.س`:`${Number(n||0).toFixed(2)} $`}
+function updateUsdConversionRateNote(value){const el=$('#usdConversionRateText'),rate=Number(value);if(el)el.textContent=Number.isFinite(rate)&&rate>0?rate.toLocaleString('ar-SY',{maximumFractionDigits:2}):'سعر الصرف المعتمد'}
+async function refreshUsdConversionRateNote(){const el=$('#usdConversionRateText');if(!el)return;const r=await sb.from('settings').select('value').eq('key','usd_to_syp_rate').maybeSingle();if(!r.error)updateUsdConversionRateNote(r.data?.value)}
+window.addEventListener('focus',refreshUsdConversionRateNote);
 function whatsappNumber(v){let n=String(v||'').replace(/\D/g,'');if(n.startsWith('00'))n=n.slice(2);if(n.startsWith('0'))n='963'+n.slice(1);else if(!n.startsWith('963'))n='963'+n;return n}
 async function loadConfig(){
  const [s,g,p]=await Promise.all([sb.from('settings').select('key,value'),sb.from('games').select('*').eq('visible',true).order('sort_order'),sb.from('packages').select('*').eq('visible',true).order('sort_order')]);
@@ -62,7 +65,7 @@ async function loadConfig(){
   if(g.error||!(g.data||[]).length) g.data=[{id:9001,name:'Free Fire Global',description:'شحن الجواهر',icon:'🔥',visible:true},{id:9002,name:'PUBG Global',description:'شحن الشدات',icon:'🎯',visible:true}];
   if(p.error) p.data=[];
  }
- config={settings:Object.fromEntries((s.data||[]).map(x=>[x.key,x.value])),games:g.data||[],packages:p.data||[],sections:sec.data||[]};window.__baseSettings=config.settings;window.dispatchEvent(new Event('base-settings-ready'));
+ config={settings:Object.fromEntries((s.data||[]).map(x=>[x.key,x.value])),games:g.data||[],packages:p.data||[],sections:sec.data||[]};updateUsdConversionRateNote(config.settings.usd_to_syp_rate);window.__baseSettings=config.settings;window.dispatchEvent(new Event('base-settings-ready'));
  loadDynamicSections(config.sections);
  const x=config.settings;if($('#brandName'))$('#brandName').textContent=x.site_name||'Base Card';if($('#brandTagline'))$('#brandTagline').textContent=x.tagline||'';if($('#paymentInfo'))$('#paymentInfo').textContent=x.sham_cash||'اشحن رصيدك من قسم شراء النقاط أولًا.';if($('#walletPaymentInfo'))$('#walletPaymentInfo').textContent=x.sham_cash||'سيتم عرض بيانات شام كاش هنا بعد ضبطها من لوحة الإدارة.';
  if(x.sham_cash_qr&&$('#paymentQr')&&$('#qrBox')){$('#paymentQr').src=x.sham_cash_qr;$('#qrBox').classList.remove('hidden')}
