@@ -4,7 +4,8 @@
   const anon=window.SUPABASE_ANON_KEY;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const isSensitive=k=>/(password|passcode|كلمة\s*المرور|رمز\s*سري)/i.test(String(k));
-  let products=[], byId=new Map(), search, sequence=0;
+  const APPROVED_CHAT_IDS=new Set([6,12,17,22,30,33,35,38,40,42,43,44,45,46,47,49,52,54,56,57,58,59,60,61,62,63,65,66,67,68,69,70,71,72,73,74,76,77,78,79,80,81,82,83,84,85,86,87,88,89,91,92,93,94,96,97,100,101,102,104,107,108,109,110,111,112,266,267,268,275,281,282,283,284,286,287,289,290,291,292,293,294,295,296,297,298,299,300,301,302,304,305,306,307,309,323,754,755,757,789,792,793,794,796,798,799,800,801,817,863,864,865,869,879,881,883,884,885,886,887,890,891,892,893,894,895,896,897,898,900,901,902,904,955,958,981,1010,1017,1037,1043,1048,1071,1085,1086,1087,1088,1089,1093,1094,1103,1105,1113]);
+  let products=[], byId=new Map(), search;
 
   async function api(body){
     const r=await fetch(endpoint,{method:'POST',headers:{apikey:anon,Authorization:'Bearer '+anon,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -36,7 +37,7 @@
   function draw(){
     const grid=document.getElementById('chatappsGrid');if(!grid)return;
     if(!products.length){grid.innerHTML='<div class="panel km-status error">لا توجد تطبيقات متاحة حاليًا.</div>';return}
-    grid.innerHTML=products.map(p=>`<button type="button" class="game-card chat-fix-card" data-chat-id="${Number(p.id)}"><span class="badge">متوفر الآن</span><h3>💬 ${esc(p.name||'تطبيق')}</h3><p>Product ID ${Number(p.id)} — باقة مستقلة</p><span class="btn">عرض الباقات ←</span></button>`).join('');
+    grid.innerHTML=products.map(p=>`<button type="button" class="game-card chat-fix-card" data-chat-id="${Number(p.id)}" ${p.available===false?'disabled aria-disabled="true"':''}><span class="badge">${p.available===false?'غير متاح حاليًا':'متوفر الآن'}</span><h3>💬 ${esc(p.name||'تطبيق')}</h3><p>Product ID ${Number(p.id)} — باقة مستقلة</p><span class="btn">عرض الباقات ←</span></button>`).join('');
     if(!search){search=document.createElement('input');search.id='chatFixSearch';search.type='search';search.placeholder='ابحث عن التطبيق بالاسم أو Product ID';search.setAttribute('aria-label','البحث عن التطبيق');search.style.cssText='display:block;width:100%;max-width:520px;margin:0 0 18px;padding:13px 16px;border:1px solid #334155;border-radius:12px;background:#111827;color:#fff;font-size:16px;';grid.parentNode.insertBefore(search,grid);search.addEventListener('input',filter)}
     filter();grid.querySelectorAll('.chat-fix-card').forEach(b=>b.addEventListener('click',()=>openProduct(byId.get(Number(b.dataset.chatId)))));
   }
@@ -82,7 +83,7 @@
   }
   async function run(){
     const grid=document.getElementById('chatappsGrid');if(!grid)return;
-    try{const r=await api({action:'products'});products=(r.products||[]).filter(p=>p.available!==false&&Number(p.parent_id)===6&&p.id!=null);byId=new Map(products.map(p=>[Number(p.id),p]));draw()}
+    try{const r=await api({action:'products'});products=(r.products||[]).filter(p=>Number(p.parent_id)===6&&APPROVED_CHAT_IDS.has(Number(p.id))&&p.id!=null).sort((a,b)=>Number(a.id)-Number(b.id));byId=new Map(products.map(p=>[Number(p.id),p]));draw()}
     catch(_){grid.innerHTML='<div class="panel km-status error">تعذر تحميل التطبيقات الآن. حاول تحديث الصفحة.</div>'}
   }
   document.addEventListener('DOMContentLoaded',run);setTimeout(run,1200);setTimeout(run,6000);

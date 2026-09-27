@@ -30,13 +30,16 @@ const providerBalanceError = (x)=>/(insufficient|not enough|no balance|رصيد|
 const baseStatus = (s)=>s === 'wait' ? 'pending' : s;
 const providerId = (x)=>x?.order_id ?? x?.data?.order_id ?? (Array.isArray(x?.data) ? x.data[0]?.order_id : null) ?? null;
 const APPROVED_FREE_FIRE_IDS = new Set([276,277,14,20,23,27,31,426,431,436,437,1104]);
+const APPROVED_CHAT_IDS = new Set([6,12,17,22,30,33,35,38,40,42,43,44,45,46,47,49,52,54,56,57,58,59,60,61,62,63,65,66,67,68,69,70,71,72,73,74,76,77,78,79,80,81,82,83,84,85,86,87,88,89,91,92,93,94,96,97,100,101,102,104,107,108,109,110,111,112,266,267,268,275,281,282,283,284,286,287,289,290,291,292,293,294,295,296,297,298,299,300,301,302,304,305,306,307,309,323,754,755,757,789,792,793,794,796,798,799,800,801,817,863,864,865,869,879,881,883,884,885,886,887,890,891,892,893,894,895,896,897,898,900,901,902,904,955,958,981,1010,1017,1037,1043,1048,1071,1085,1086,1087,1088,1089,1093,1094,1103,1105,1113]);
+const APPROVED_PUBG_IDS = new Set([114,115,116,117,118,119,259,311,312,313,314,315,917,918,919,920,996,1018,1019,1020,1023,1024,1025,1027,1029,1030,1031]);
+const PUBLIC_PRODUCT_IDS = new Set([...APPROVED_FREE_FIRE_IDS,...APPROVED_CHAT_IDS,...APPROVED_PUBG_IDS,4,11]);
 const providerProductAllowed = (p)=>{
   const id = Number(p?.id);
   const category = String(p?.category_name || '').trim();
   if (id === 4 || id === 11) return true;
   if (/^FREE FIRE GLOBAL$/i.test(category)) return APPROVED_FREE_FIRE_IDS.has(id);
-  if (/^PUBG GLOBAL$/i.test(category)) return true;
-  return Number(p?.parent_id) === 6;
+  if (/^PUBG GLOBAL$/i.test(category)) return APPROVED_PUBG_IDS.has(id);
+  return Number(p?.parent_id) === 6 && APPROVED_CHAT_IDS.has(id);
 };
 const normalizeDigits = (v)=>String(v??'').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
 const validQuantity = (p, raw)=>{
@@ -171,7 +174,7 @@ Deno.serve(async (req)=>{
     if (action === 'products') {
       const rows=await getProducts();
       const safeFields=['id','name','available','category_name','parent_id','params','product_type','qty_values'];
-      return json({products:rows.filter(p=>p.available!==false||APPROVED_FREE_FIRE_IDS.has(Number(p.id))).map((p)=>Object.fromEntries(safeFields.filter((k)=>p[k]!==undefined).map((k)=>[k,p[k]])))});
+      return json({products:rows.filter(p=>PUBLIC_PRODUCT_IDS.has(Number(p.id))).map((p)=>Object.fromEntries(safeFields.filter((k)=>p[k]!==undefined).map((k)=>[k,p[k]])))});
     }
     if(action==='quote'){
       const productId=Number(body.product_id),rawQty=String(body.qty??'');
