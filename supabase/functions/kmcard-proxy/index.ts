@@ -43,16 +43,14 @@ const providerProductAllowed = (p)=>{
 };
 const normalizeDigits = (v)=>String(v??'').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
 const validQuantity = (p, raw)=>{
-  const qText=normalizeDigits(raw), q=Number(qText);
-  if (!Number.isFinite(q) || q <= 0) return false;
+  let q;try{q=scaledBigInt(raw,6)}catch(_){return false}
+  if(q<=0n)return false;
   const values=p?.qty_values;
-  if (p?.product_type === 'specificPackage' || Array.isArray(values))
-    return Array.isArray(values) && values.some((v)=>Number(normalizeDigits(v))===q);
-  if ((p?.product_type === 'amount' || p?.product_type === 'package') && values && typeof values === 'object') {
-    const min=Number(normalizeDigits(values.min)), max=Number(normalizeDigits(values.max));
-    return Number.isFinite(min) && Number.isFinite(max) && q>=min && q<=max;
+  if(p?.product_type==='specificPackage'||Array.isArray(values))return Array.isArray(values)&&values.some((v)=>{try{return scaledBigInt(v,6)===q}catch(_){return false}});
+  if((p?.product_type==='amount'||p?.product_type==='package')&&values&&typeof values==='object'){
+    try{return q>=scaledBigInt(values.min,6)&&q<=scaledBigInt(values.max,6)}catch(_){return false}
   }
-  return q === 1;
+  return q===1000000n;
 };
 const CHAT_MARGIN_NUM=114n, CHAT_MARGIN_DEN=100n, CHAT_COST_SCALE=1000000000000000000n, CHAT_QTY_SCALE=1000000n;
 function scaledBigInt(value, scaleDigits){
