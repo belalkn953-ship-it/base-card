@@ -55,10 +55,17 @@ async function loadSettings(){
 $('#settingsForm').addEventListener('submit',async e=>{e.preventDefault();const rows=Object.entries(Object.fromEntries(new FormData(e.target))).map(([key,value])=>({key,value}));const r=await sb.from('settings').upsert(rows);notice(r.error?'تعذر حفظ الإعدادات':'تم حفظ إعدادات الموقع',r.error?'error':'success')});$('#qrForm').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.target),file=f.get('qr_code');if(!file?.size)return notice('اختر صورة رمز QR أولًا','error');try{const {data:{user}}=await sb.auth.getUser();if(!user)return notice('انتهت جلسة المشرف، سجّل الدخول مجددًا','error');const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_');const path=`${user.id}/qr-${Date.now()}-${safeName}`;const up=await sb.storage.from('site-assets').upload(path,file,{upsert:true});if(up.error)throw up.error;const url=sb.storage.from('site-assets').getPublicUrl(path).data.publicUrl;const r=await sb.from('settings').upsert({key:'sham_cash_qr',value:url});if(r.error)throw r.error;$('#qrPreview').src=url;$('#qrPreview').classList.remove('hidden');notice('تم رفع رمز QR وسيظهر للعملاء','success')}catch(err){notice(err.message||'تعذر رفع صورة QR','error')}});
 async function loadMessages(){
   const box=$('#messagesTable');box.innerHTML='<div class="empty">جارٍ تحميل رسائل الدعم…</div>';
-  try{const r=await sb.from('messages').select('*').order('id',{ascending:false});if(r.error){box.innerHTML='<div class="alert error">تعذر تحميل رسائل الدعم.</div>';return}box.innerHTML=r.data?.length?`<table class="data-table"><thead><tr><th>التاريخ</th><th>الاسم</th><th>التواصل</th><th>الرسالة</th></tr></thead><tbody>${r.data.map(m=>`<tr><td>${new Date(m.created_at).toLocaleString('ar')}</td><td>${esc(m.name)}</td><td>${esc(m.contact)}</td><td>${esc(m.message)}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">لا توجد رسائل.</div>'}
+  try{const r=await sb.from('messages').select('*').order('id',{ascending:false});if(r.error){box.innerHTML='<div class="alert error">تعذر تحميل رسائل الدعم.</div>';return}box.innerHTML=r.data?.length?`<table class="data-table"><thead><tr><th>التاريخ</th><th>الاسم</th><th>التواصل</th><th>الرسالة</th><th>إجراء</th></tr></thead><tbody>${r.data.map(m=>`<tr><td>${new Date(m.created_at).toLocaleString('ar')}</td><td>${esc(m.name)}</td><td>${esc(m.contact)}</td><td>${esc(m.message)}</td><td><button type="button" class="mini-btn danger delete-support-message" data-id="${esc(m.id)}" title="حذف الرسالة" aria-label="حذف الرسالة" style="width:32px;height:32px;min-width:32px;padding:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:15px">🗑️</button></td></tr>`).join('')}</tbody></table>`:'<div class="empty">لا توجد رسائل.</div>'}
   catch(_){box.innerHTML='<div class="alert error">تعذر الاتصال لتحميل رسائل الدعم. أعد المحاولة.</div>'}
 }
-
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('.delete-support-message');if(!b)return;
+  if(!window.confirm('هل تريد حذف رسالة الدعم نهائيًا؟ لا يمكن التراجع عن الحذف.'))return;
+  const id=b.dataset.id;if(!id)return notice('تعذر تحديد الرسالة.','error');
+  b.disabled=true;
+  try{const r=await sb.from('messages').delete().eq('id',id).select('id');if(r.error){notice('تعذر حذف الرسالة. تحقق من صلاحية المشرف.','error');b.disabled=false;return}if(!r.data?.length){notice('لم يتم حذف الرسالة؛ ربما حُذفت مسبقًا.','error');await loadMessages();return}notice('تم حذف رسالة الدعم.','success');await loadMessages()}
+  catch(_){notice('تعذر الاتصال لحذف الرسالة. أعد المحاولة.','error');b.disabled=false}
+});
 
 async function loadTopups(){
   const box=$('#topupsTable'),st=$('#topupStatus')?.value||'';box.innerHTML='<div class="empty">جارٍ تحميل طلبات الشحن…</div>';
