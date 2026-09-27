@@ -335,6 +335,11 @@ Deno.serve(async (req)=>{
         });
         return json({ error: 'الكمية غير مدعومة لهذا المنتج' }, 400, req);
       }
+      const isChatProduct=Number(p.parent_id)===6;
+      if(isChatProduct){
+        const serverQuote=calculateChatSale(p.price,qtyRaw);
+        if(String(body.quoted_sale_price_syp??'')!==serverQuote)return json({error:'تغيّر السعر؛ حدّث السعر قبل الشراء'},409,req);
+      }
       const required = Array.isArray(p.params) ? p.params.filter((k)=>String(k).trim()) : [];
       const missing = required.filter((k)=>{
         const v = params[String(k)];
@@ -349,7 +354,6 @@ Deno.serve(async (req)=>{
       }
       const paramsWithPlayer=params;
       const storedParams=await protectParams(paramsWithPlayer);
-      const isChatProduct=Number(p.parent_id)===6;
       const created=isChatProduct
         ? await admin.rpc('create_kmcard_chat_order',{
             p_user_id:ud.user.id,p_product_id:Number(p.id),p_product_name:String(p.name||''),
