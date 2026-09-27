@@ -65,11 +65,16 @@ function applyExchangeRate(rate){
   if($('#walletExchangeNote')&&walletCurrency==='USD')$('#walletExchangeNote').textContent=`سيُحوّل المبلغ بالدولار تلقائيًا إلى رصيد بالليرة السورية الجديدة بسعر ${rateText(exchangeRateValue)} ل.س لكل دولار؛ الشراء يُخصم من رصيد الليرة.`
 }
 async function loadExchangeRate(){
-  const error=$('#exchangeRateError');if(error){error.textContent='';error.classList.add('hidden')}
-  const r=await sb.from('settings').select('value').eq('key','usd_to_syp_rate').maybeSingle();
-  if(r.error){if(error){error.textContent='تعذر تحميل سعر الصرف.';error.classList.remove('hidden')}return}
-  const rate=Number(r.data?.value);if(!Number.isFinite(rate)||rate<=0){if(error){error.textContent='سعر الصرف غير مضبوط.';error.classList.remove('hidden')}return}
-  applyExchangeRate(rate)
+  const error=$('#exchangeRateError'),current=$('#exchangeRateCurrent');
+  if(error){error.textContent='';error.classList.add('hidden')}
+  if(current)current.textContent='جارٍ تحميل سعر الصرف…';
+  try{
+    const r=await sb.from('settings').select('value').eq('key','usd_to_syp_rate').maybeSingle();
+    if(r.error){if(current)current.textContent='تعذر تحميل السعر';if(error){error.textContent='تعذر تحميل سعر الصرف. تحقّق من الاتصال وجلسة الإدارة.';error.classList.remove('hidden')}return}
+    const rate=Number(r.data?.value);
+    if(!Number.isFinite(rate)||rate<=0){if(current)current.textContent='غير مضبوط';if(error){error.textContent='سعر الصرف غير مضبوط في إعدادات الموقع.';error.classList.remove('hidden')}return}
+    applyExchangeRate(rate)
+  }catch(_){if(current)current.textContent='تعذر تحميل السعر';if(error){error.textContent='تعذر الاتصال لتحميل سعر الصرف. أعد المحاولة.';error.classList.remove('hidden')}}
 }
 $('#exchangeRateInput')?.addEventListener('input',updateExchangeRatePreview);
 $('#exchangeRateForm')?.addEventListener('submit',async e=>{
@@ -120,8 +125,32 @@ $('#walletAdjustForm').addEventListener('submit',async e=>{
 });
 
 async function loadUsers(){const r=await sb.from('profiles').select('id,email,name,role,created_at,wallets(balance_usd,balance_syp)').order('created_at',{ascending:false});const rows=r.data||[];$('#usersTable').innerHTML=rows.length?`<table class="data-table"><thead><tr><th>المستخدم</th><th>الدور</th><th>الرصيد</th><th>تاريخ التسجيل</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.name||x.email)}<br><small>${esc(x.email)}</small></td><td>${x.role==='admin'?'مشرف':'عميل'}</td><td>${Number(walletOf(x).balance_usd||0).toFixed(2)} $ / ${Number(walletOf(x).balance_syp||0).toLocaleString('ar-SY')} ل.س</td><td>${new Date(x.created_at).toLocaleString('ar')}</td></tr>`).join('')}</tbody></table>`:'<div class="empty">لا يوجد مستخدمون.</div>'}
-async function loadStats(){const [tx,top,ord,users,profit]=await Promise.all([sb.from('wallet_transactions').select('type,amount,currency'),sb.from('topup_requests').select('status,amount,currency'),sb.from('orders').select('status'),sb.from('profiles').select('id',{count:'exact',head:true}),sb.rpc('admin_daily_profit_summary',{p_day:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Damascus'}).format(new Date())})]);const t=tx.data||[],tp=top.data||[],o=ord.data||[];const approved=tp.filter(x=>x.status==='approved');const usd=approved.filter(x=>x.currency==='USD').reduce((a,x)=>a+Number(x.amount),0),syp=approved.filter(x=>x.currency==='SYP').reduce((a,x)=>a+Number(x.amount),0);$('#statsGrid').innerHTML=[['المستخدمون',users.count||0],['الطلبات',o.length],['الشحنات المقبولة',approved.length],['المبيعات المكتملة',o.filter(x=>x.status==='completed').length]].map(x=>`<div class="kpi"><small>${x[0]}</small><b>${x[1]}</b></div>`).join('');$('#statsDetails').textContent=`إجمالي الشحن المقبول: ${usd.toFixed(2)} $ و${syp.toLocaleString('ar-SY')} ل.س — عدد الحركات المالية: ${t.length}`;renderProfit(profit)}
-function renderProfit(r){const box=$('#profitSummary'),detail=$('#profitDetails');if(!box||!detail)return;if(r.error){box.innerHTML='<div class="alert error">تعذر تحميل ملخص الربح. طبّق Migration ملخص الربح في Supabase أولًا.</div>';detail.textContent='';return}const x=r.data||{};const money=n=>Number(n||0).toLocaleString('ar-SY',{maximumFractionDigits:2});$('#profitDayLabel').textContent=`اليوم ${esc(x.day||'—')} — توقيت Asia/Damascus`;box.innerHTML=[['إيراد المبيعات',`${money(x.sales_revenue_syp)} ل.س`],['تكلفة المزود المعروفة',`${money(x.provider_cost_syp)} ل.س`],['الربح الإجمالي المؤكد',`${money(x.gross_profit_syp)} ل.س`],['هامش الربح',x.profit_margin_pct==null?'غير متاح':`${Number(x.profit_margin_pct).toFixed(2)}%`],['طلبات مكتملة',x.completed_orders||0],['قيد المعالجة',x.pending_orders||0]].map(v=>`<div class="kpi"><small>${v[0]}</small><b>${v[1]}</b></div>`).join('');detail.textContent=`مرفوضة: ${x.rejected_orders||0} — مكتملة بتكلفة معروفة: ${x.known_cost_completed_orders||0} — مكتملة دون تكلفة: ${x.missing_cost_completed_orders||0}. ${x.cost_note||''}`}
+async function loadStats(){
+  const grid=$('#statsGrid'),details=$('#statsDetails');
+  if(grid)grid.innerHTML='<div class="empty">جارٍ تحميل الإحصائيات…</div>';
+  if(details)details.textContent='';
+  $('#profitSummary').innerHTML='<div class="empty">جارٍ تحميل ملخص الربح…</div>';
+  try{
+    const [tx,top,ord,users,profit]=await Promise.all([
+      sb.from('wallet_transactions').select('type,amount,currency'),
+      sb.from('topup_requests').select('status,amount,currency'),
+      sb.from('orders').select('status'),
+      sb.from('profiles').select('id',{count:'exact',head:true}),
+      sb.rpc('admin_daily_profit_summary',{p_day:new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Damascus'}).format(new Date())})
+    ]);
+    const t=tx.data||[],tp=top.data||[],o=ord.data||[],approved=tp.filter(x=>x.status==='approved');
+    const usd=approved.filter(x=>x.currency==='USD').reduce((a,x)=>a+Number(x.amount),0),syp=approved.filter(x=>x.currency==='SYP').reduce((a,x)=>a+Number(x.amount),0);
+    grid.innerHTML=[['المستخدمون',users.error?'—':users.count||0],['الطلبات',ord.error?'—':o.length],['الشحنات المقبولة',top.error?'—':approved.length],['المبيعات المكتملة',ord.error?'—':o.filter(x=>x.status==='completed').length]].map(x=>`<div class="kpi"><small>${x[0]}</small><b>${x[1]}</b></div>`).join('');
+    const failures=[tx.error&&'الحركات المالية',top.error&&'طلبات الشحن',ord.error&&'الطلبات',users.error&&'عدد المستخدمين'].filter(Boolean);
+    details.textContent=`إجمالي الشحن المقبول: ${top.error?'—':usd.toFixed(2)+' $ و'+syp.toLocaleString('ar-SY')+' ل.س'} — عدد الحركات المالية: ${tx.error?'—':t.length}${failures.length?' — تعذر تحميل: '+failures.join('، '):''}`;
+    renderProfit(profit)
+  }catch(_){
+    if(grid)grid.innerHTML='<div class="alert error">تعذر تحميل الإحصائيات بسبب مشكلة اتصال. أعد المحاولة.</div>';
+    if(details)details.textContent='لم تتغير أي بيانات.';
+    renderProfit({error:true})
+  }
+}
+function renderProfit(r){const box=$('#profitSummary'),detail=$('#profitDetails');if(!box||!detail)return;if(r?.error){box.innerHTML='<div class="alert error">تعذر تحميل ملخص الربح. تحقّق من الاتصال وصلاحية المشرف ثم أعد المحاولة.</div>';detail.textContent='';return}const x=r.data||{};const money=n=>Number(n||0).toLocaleString('ar-SY',{maximumFractionDigits:2});$('#profitDayLabel').textContent=`اليوم ${esc(x.day||'—')} — توقيت Asia/Damascus`;box.innerHTML=[['إيراد المبيعات',`${money(x.sales_revenue_syp)} ل.س`],['تكلفة المزود المعروفة',`${money(x.provider_cost_syp)} ل.س`],['الربح الإجمالي المؤكد',`${money(x.gross_profit_syp)} ل.س`],['هامش الربح',x.profit_margin_pct==null?'غير متاح':`${Number(x.profit_margin_pct).toFixed(2)}%`],['طلبات مكتملة',x.completed_orders||0],['قيد المعالجة',x.pending_orders||0]].map(v=>`<div class="kpi"><small>${v[0]}</small><b>${v[1]}</b></div>`).join('');detail.textContent=`مرفوضة: ${x.rejected_orders||0} — مكتملة بتكلفة معروفة: ${x.known_cost_completed_orders||0} — مكتملة دون تكلفة: ${x.missing_cost_completed_orders||0}. ${x.cost_note||''}`}
 $('#refreshProfit')?.addEventListener('click',loadStats);
 
 
