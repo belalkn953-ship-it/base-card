@@ -29,6 +29,38 @@ async function loadKmGameCatalog(){
   if(!kmGameCatalog.some(p=>String(p.category_name||'').trim().toUpperCase()==='PUBG GLOBAL')) kmGameCatalog.push(...KM_PUBG_GLOBAL_FALLBACK);
   if($('#gameId')?.value) fillPackages();syncCustomerNameField();
 }
+let kmAvailabilityRefreshRunning=false,kmAvailabilityPollingStarted=false;
+async function refreshKmAvailability(){
+  if(kmAvailabilityRefreshRunning)return;
+  kmAvailabilityRefreshRunning=true;
+  try{
+    const r=await sb.functions.invoke(KM_PROXY,{body:{action:'products'}});
+    if(r.error||r.data?.error)return;
+    const rows=extractKmProducts(r.data),latest=new Map(rows.map(p=>[Number(p.id),p]));
+    if(!rows.length)return;
+    let changed=false;
+    kmGameCatalog=kmGameCatalog.map(p=>{
+      const live=latest.get(Number(p.id));
+      if(!live||typeof live.available!=='boolean'||p.available===live.available)return p;
+      changed=true;return {...p,available:live.available};
+    });
+    if(!changed)return;
+    const game=config.games.find(g=>Number(g.id)===Number($('#gameId')?.value));
+    if(!isKmGame(game))return;
+    const selected=String($('#packageId')?.value||'');
+    fillPackages();
+    if(selected){
+      const button=[...document.querySelectorAll('#packagesGrid .package-card')].find(x=>String(x.dataset.packageId)===selected&&!x.disabled);
+      if(button){$('#packageId').value=selected;button.classList.add('selected');updatePrice()}
+    }
+  }catch(_){}finally{kmAvailabilityRefreshRunning=false}
+}
+function startKmAvailabilityPolling(){
+  if(kmAvailabilityPollingStarted)return;kmAvailabilityPollingStarted=true;
+  setInterval(()=>{if(document.visibilityState==='visible')refreshKmAvailability()},60000);
+  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refreshKmAvailability()});
+  window.addEventListener('focus',refreshKmAvailability);
+}
 function kmPackageFor(id){return kmGameCatalog.find(p=>Number(p.id)===Number(id));}
 const labels={topup:'إضافة رصيد',purchase:'شراء من المحفظة',adjustment:'تعديل إداري'};
 const sectionNames={shop:'الألعاب والباقات',wallet:'المحفظة والنقاط',track:'تتبع الطلب',support:'التواصل مع الدعم',order:'إنشاء طلب شحن',chatapps:'تطبيقات الدردشة',transfer:'تحويل الرصيد'};const sectionTargets={home:null,...sectionNames,topup:'wallet',games:'shop'};
@@ -75,7 +107,7 @@ async function loadUser(){const {data}=await sb.auth.getUser();currentUser=data.
 async function loadWallet(){if(!currentUser)return;const [w,t]=await Promise.all([sb.from('wallets').select('*').eq('user_id',currentUser.id).maybeSingle(),sb.from('wallet_transactions').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false}).limit(30)]);const wallet=w.data||{balance_usd:0,balance_syp:0};$('#balanceUsd').textContent=money(wallet.balance_usd,'USD');$('#balanceSyp').textContent=money(wallet.balance_syp,'SYP');const rows=t.data||[];$('#transactionsTable').innerHTML=rows.length?rows.map(x=>`<div class="transaction-row"><span>${esc(labels[x.type]||x.type)}<small>${esc(String(x.description||'').replace(/KM\s*Card|كيم\s*كارد/ig,'خدمة الشحن'))}<br>${new Date(x.created_at).toLocaleString('ar-SY',{timeZone:'Asia/Damascus'})}</small></span><b class="${Number(x.amount)>=0?'plus':'minus'}">${Number(x.amount)>=0?'+':''}${money(x.amount,x.currency||'SYP')}</b></div>`).join(''):'<div class="empty">لا توجد عمليات بعد.</div>'}
 async function signIn(){const {error}=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin+location.pathname}});if(error)show('#walletAlert','تعذر فتح تسجيل الدخول عبر Google: '+error.message,'error')}
 $('#googleLogin').addEventListener('click',e=>{e.preventDefault();signIn()});$('#logoutUser').addEventListener('click',async()=>{await sb.auth.signOut();location.reload()});sb.auth.onAuthStateChange(()=>setTimeout(loadUser,0));
-function fillPackages(){const id=Number($('#gameId').value),grid=$('#packagesGrid'),hidden=$('#packageId');hidden.value='';if(!id){grid.innerHTML='<div class="packages-empty">اختر اللعبة أولًا</div>';updatePrice();return}const game=config.games.find(g=>Number(g.id)===id), cat=isKmGame(game); const kmPacks=cat?kmGameCatalog.filter(p=>String(p.category_name||'').trim().toUpperCase()===cat && (cat!=='FREE FIRE GLOBAL'||KM_FREE_FIRE_IDS.includes(Number(p.id)))):[]; const packs=cat?kmPacks:config.packages.filter(p=>p.game_id===id); grid.innerHTML=packs.length?packs.map(p=>{const unavailable=cat&&p.available===false,unpriced=cat&&p.sale_price_syp==null,blocked=unavailable||unpriced;const price=unavailable?'غير متاحة حاليًا لدى المزوّد':unpriced?'السعر غير مضبوط بعد':cat?`${Number(p.sale_price_syp).toLocaleString('ar-SY')} ل.س جديدة`:`${esc(p.price_amount??p.price)} ${p.currency==='SYP'?'ل.س جديدة':'$'}`;return `<button type="button" class="package-card" data-package-id="${p.id}" data-km-product="${cat?'1':''}" ${blocked?'disabled aria-disabled="true"':''}><span class="package-icon">✦</span><span class="package-name">${esc(p.name)}</span><span class="package-price">${price}</span><span class="package-check">✓</span></button>`}).join(''):'<div class="packages-empty">لا توجد باقات متاحة لهذه اللعبة</div>';updatePrice()}
+function fillPackages(){const id=Number($('#gameId').value),grid=$('#packagesGrid'),hidden=$('#packageId');hidden.value='';if(!id){grid.innerHTML='<div class="packages-empty">اختر اللعبة أولًا</div>';updatePrice();return}const game=config.games.find(g=>Number(g.id)===id), cat=isKmGame(game); const kmPacks=cat?kmGameCatalog.filter(p=>String(p.category_name||'').trim().toUpperCase()===cat && (cat!=='FREE FIRE GLOBAL'||KM_FREE_FIRE_IDS.includes(Number(p.id)))):[]; const packs=cat?kmPacks:config.packages.filter(p=>p.game_id===id); grid.innerHTML=packs.length?packs.map(p=>{const unavailable=cat&&p.available===false,unpriced=cat&&p.sale_price_syp==null,blocked=unavailable||unpriced;const price=unavailable?'غير متاح':unpriced?'السعر غير مضبوط بعد':cat?`${Number(p.sale_price_syp).toLocaleString('ar-SY')} ل.س جديدة`:`${esc(p.price_amount??p.price)} ${p.currency==='SYP'?'ل.س جديدة':'$'}`;return `<button type="button" class="package-card${unavailable?' package-unavailable':''}" data-package-id="${p.id}" data-km-product="${cat?'1':''}" ${blocked?'disabled aria-disabled="true"':''}><span class="package-icon">✦</span><span class="package-name">${esc(p.name)}</span><span class="package-price">${price}</span><span class="package-check">✓</span></button>`}).join(''):'<div class="packages-empty">لا توجد باقات متاحة لهذه اللعبة</div>';updatePrice()}
 function updatePrice(){const p=kmPackageFor($('#packageId').value)||config.packages.find(x=>x.id===Number($('#packageId').value));$('#orderPrice').textContent=p?(p.category_name?(p.sale_price_syp!=null?`سيتم خصم ${Number(p.sale_price_syp).toLocaleString('ar-SY')} ل.س جديدة من محفظتك عند إرسال الطلب.`:'يجب تحديد سعر البيع من لوحة الإدارة أولًا.'):`سيتم خصم ${money(p.price_amount??p.price,p.currency)} من محفظتك عند إرسال الطلب.`):'سيتم خصم قيمة الباقة من محفظتك عند إرسال الطلب.';if($('#orderPriceUsd'))$('#orderPriceUsd').textContent=p?.price_usd?`السعر بالدولار: $${Number(p.price_usd).toFixed(2)}`:''}
 function syncCustomerNameField(){const game=config.games.find(x=>Number(x.id)===Number($('#gameId')?.value));const isFreeFire=/free\s*fire|فري\s*فاير/i.test(String(game?.name||''));const field=$('#customerNameField'),input=$('[name="customer_name"]');if(field&&input){field.hidden=isFreeFire;field.style.display=isFreeFire?'none':'';field.setAttribute('aria-hidden',isFreeFire?'true':'false');input.required=!isFreeFire;if(isFreeFire){input.value='';input.setCustomValidity('')}}}
 $('#gameId').addEventListener('change',()=>{fillPackages();syncCustomerNameField()});document.addEventListener('click',e=>{const p=e.target.closest('.package-card');if(p&&!p.disabled){if($('#orderForm'))delete $('#orderForm').dataset.orderUuid;$('#packageId').value=p.dataset.packageId;document.querySelectorAll('.package-card').forEach(x=>x.classList.toggle('selected',x===p));updatePrice()}});
@@ -97,7 +129,7 @@ async function loadTrackOrders(force=false){if(!$('#trackResult'))return;if(trac
 setInterval(()=>{const box=$('#trackResult');if(box&&box.textContent.includes('جارٍ تحميل طلباتك')){trackLoading=false;box.innerHTML='<h3>طلبات اليوم</h3><p class="muted">حدث الواجهة 🔥</p>'}},12000);
 $('#trackForm').addEventListener('submit',e=>{e.preventDefault();window.__kmStatusCheckDone=false;loadTrackOrders(true)});
 $('#supportForm').addEventListener('submit',async e=>{e.preventDefault();const {data:ud}=await sb.auth.getUser(),f=Object.fromEntries(new FormData(e.target));const r=await sb.from('messages').insert({user_id:ud.user?.id||null,name:f.name,contact:f.contact,message:f.message});if(r.error)return show('#supportAlert','تعذر إرسال الرسالة','error');show('#supportAlert','تم إرسال رسالتك إلى الدعم','success');e.target.reset()});
-const navigationType=performance.getEntriesByType?.('navigation')?.[0]?.type||'';const initialHash=location.hash.slice(1);const directTrackEntry=initialHash==='track'&&navigationType!=='reload';if(directTrackEntry)history.replaceState({},'',location.pathname+location.search);const initialTarget=directTrackEntry?null:sectionTargets[initialHash];openMainSection(initialTarget||null,false,initialTarget&&initialHash!==initialTarget?initialHash:'');Promise.allSettled([loadConfig(),loadUser()]).then(rs=>{const h=location.hash.slice(1),target=sectionTargets[h];if(!directTrackEntry)openMainSection(target||null,false,target&&h!==target?h:'');if(rs[0].status==='rejected'){console.error('loadConfig failed',rs[0].reason);show('#orderAlert','تعذر تحميل بيانات الموقع حاليًا','error')}});
+const navigationType=performance.getEntriesByType?.('navigation')?.[0]?.type||'';const initialHash=location.hash.slice(1);const directTrackEntry=initialHash==='track'&&navigationType!=='reload';if(directTrackEntry)history.replaceState({},'',location.pathname+location.search);const initialTarget=directTrackEntry?null:sectionTargets[initialHash];openMainSection(initialTarget||null,false,initialTarget&&initialHash!==initialTarget?initialHash:'');Promise.allSettled([loadConfig(),loadUser()]).then(rs=>{const h=location.hash.slice(1),target=sectionTargets[h];if(!directTrackEntry)openMainSection(target||null,false,target&&h!==target?h:'');if(rs[0].status==='rejected'){console.error('loadConfig failed',rs[0].reason);show('#orderAlert','تعذر تحميل بيانات الموقع حاليًا','error')}else startKmAvailabilityPolling()});
 
 async function checkTopupStatus(){try{const {data:u}=await sb.auth.getUser();if(!u?.user)return;const r=await sb.from('topup_requests').select('id,status,amount,currency,admin_note,updated_at').eq('user_id',u.user.id).order('updated_at',{ascending:false}).limit(1);const x=r.data?.[0];if(!x)return;const key='topup-status-'+x.id+'-'+x.status;if(sessionStorage.getItem(key))return;if(x.status==='approved'){const m='تم قبول طلب شراء النقاط وإضافة الرصيد إلى محفظتك.';flashMessage(m,'success');show('#walletAlert',m,'success');sessionStorage.setItem(key,'1')}else if(x.status==='rejected'){const m='تم رفض طلب شراء النقاط. راجع رقم العملية وتواصل مع الدعم.';flashMessage(m,'error');show('#walletAlert',m,'error');sessionStorage.setItem(key,'1')}}catch(_){}}
 
