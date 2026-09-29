@@ -387,7 +387,9 @@ Deno.serve(async (req)=>{
           order_number: row.order_number,
           status: row.status,
           provider_status: row.provider_status,
-          charged_syp: row.charged_syp
+          charged_syp: row.charged_syp,
+          balance_after: row.balance_after ?? null,
+          balance_currency: 'SYP'
         });
       }
       const q = new URLSearchParams({
@@ -432,6 +434,7 @@ Deno.serve(async (req)=>{
         product_id: productId, quantity: qty, order_id: Number(row.id),
         provider_status: String(final?.provider_status || status), reason_code: 'initial_provider_response'
       });
+      const {data: walletAfter}=await admin.from('wallets').select('balance_syp,balance_usd').eq('user_id',ud.user.id).maybeSingle();
       return json({
         ok: true,
         order_id: row.id,
@@ -440,6 +443,8 @@ Deno.serve(async (req)=>{
         provider_status: status,
         provider_order_id: providerId(result),
         charged_syp: row.charged_syp,
+        balance_after: walletAfter?Number(walletAfter.balance_syp):null,
+        balance_currency: 'SYP',
         ...(providerLowBalance?{error:'لا يوجد رصيد كافٍ لدى مزود الشحن حاليًا، تواصل مع الدعم'}:{})
       });
     }

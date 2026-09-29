@@ -73,12 +73,12 @@
       btn.disabled=true;btn.textContent='جارٍ إرسال الطلب…';form.dataset.submitting='1';form.dataset.orderUuid||=crypto.randomUUID();
       try{
         const r=await sb.functions.invoke('kmcard-proxy',{body:{action:'order',product:{id:Number(p.id),name:p.name,category_name:p.category_name,params:p.params||[]},qty:numText(qty.value),params,quoted_sale_price_syp:quoteValue,idempotency_key:form.dataset.orderUuid}});
-        if(r.error){let detail=r.data?.error||'';try{detail ||= (await r.error.context?.clone?.().json())?.error||''}catch(_){}throw new Error(detail||r.error.message||'تعذر تنفيذ الطلب')}if(r.data?.error)throw new Error(r.data.error);
+        if(r.data)window.applyWalletSnapshot?.(r.data);if(r.error){window.refreshBaseCardWallet?.(true);let detail=r.data?.error||'';try{detail ||= (await r.error.context?.clone?.().json())?.error||''}catch(_){}throw new Error(detail||r.error.message||'تعذر تنفيذ الطلب')}if(r.data?.error){window.refreshBaseCardWallet?.(true);throw new Error(r.data.error)}
         const number=r.data.order_number||r.data.order_id||'—';const status=r.data.status==='completed'?'مكتمل':r.data.status==='rejected'?'مرفوض وتم إرجاع الرصيد':'قيد المعالجة';
         const msg=`تم إنشاء الطلب ${number} — الحالة: ${status}`;note.textContent=msg;window.flashMessage?.(msg,r.data.status==='rejected'?'error':'success',5000);
         const recent=JSON.parse(localStorage.getItem('basecard_recent_km_orders')||'[]');recent.unshift({order_number:r.data.order_number||'',source:'kmcard',status:r.data.status||'processing',provider_status:r.data.provider_status||'wait',title:p.category_name||'خدمات الدردشة',package_name:p.name,amount:String(r.data.charged_syp??quoteValue),currency:'SYP',created_at:new Date().toISOString()});localStorage.setItem('basecard_recent_km_orders',JSON.stringify(recent.filter(x=>x.order_number).slice(0,30)));
-        delete form.dataset.orderUuid;await Promise.allSettled([window.refreshBaseCardWallet?.(),window.refreshBaseCardTrack?.()]);
-      }catch(e){const msg=friendly(e);note.textContent=msg;window.flashMessage?.(msg,'error');if(/تغيّر السعر|تغير السعر/i.test(String(e.message||''))){total.textContent='جارٍ تحديث السعر النهائي…';scheduleQuote()}}
+        window.applyWalletSnapshot?.(r.data);delete form.dataset.orderUuid;await Promise.allSettled([window.refreshBaseCardWallet?.(),window.refreshBaseCardTrack?.()]);
+      }catch(e){window.refreshBaseCardWallet?.(true);const msg=friendly(e);note.textContent=msg;window.flashMessage?.(msg,'error');if(/تغيّر السعر|تغير السعر/i.test(String(e.message||''))){total.textContent='جارٍ تحديث السعر النهائي…';scheduleQuote()}}
       finally{delete form.dataset.submitting;btn.disabled=!quoteValue||p.available===false;btn.textContent='شراء وشحن'}
     });
     if(typeof openMainSection==='function')openMainSection('chatapps',true);panel.scrollIntoView({behavior:'smooth',block:'start'});
@@ -87,8 +87,8 @@
     const grid=document.getElementById('chatappsGrid');if(!grid||productsRefreshing)return;
     productsRefreshing=true;
     try{
-      const r=await api({action:'products'});
-      const incoming=(r.products||[]).filter(p=>Number(p.parent_id)===6&&APPROVED_CHAT_IDS.has(Number(p.id))&&p.id!=null).sort((a,b)=>Number(a.id)-Number(b.id));
+      const received=window.getBaseCardProducts?await window.getBaseCardProducts(productsLoaded):((await api({action:'products'})).products||[]);
+      const incoming=received.filter(p=>Number(p.parent_id)===6&&APPROVED_CHAT_IDS.has(Number(p.id))&&p.id!=null).sort((a,b)=>Number(a.id)-Number(b.id));
       if(!productsLoaded){products=incoming;productsLoaded=true;byId=new Map(products.map(p=>[Number(p.id),p]));draw()}
       else{
         const latest=new Map(incoming.map(p=>[Number(p.id),p]));let changed=false;
