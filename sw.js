@@ -1,77 +1,30 @@
-const CACHE = 'base-card-shell-v2';
-const BASE = new URL('./', self.location.href);
-const SHELL = [BASE.href, new URL('styles.css', BASE).href, new URL('manifest.webmanifest', BASE).href];
-
-self.addEventListener('install', event => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE);
-    await Promise.all(SHELL.map(url => cache.add(url).catch(() => undefined)));
-    await self.skipWaiting();
-  })());
+const CACHE_NAME='base-card-offline-v1';
+const APP_SHELL=[
+  './','./index.html','./styles.css?v=36','./app.js?v=136',
+  './supabase-config.js','./km-game-catalog.js?v=4','./my-payments.js?v=3',
+  './account-security.js?v=6','./chatapps-fix-v6.js?v=20','./kmcard-ui.js?v=41',
+  './transfer-fallback.js?v=8','./manifest.webmanifest'
+];
+const INDEX_URL=new URL('./index.html',self.registration.scope).href;
+self.addEventListener('install',event=>{
+  event.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(APP_SHELL)).then(()=>self.skipWaiting()));
 });
-
-self.addEventListener('activate', event => {
-  event.waitUntil((async () => {
-    await self.clients.claim();
-  })());
+self.addEventListener('activate',event=>{
+  event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith('base-card-')&&key!==CACHE_NAME).map(key=>caches.delete(key)))).then(()=>self.clients.claim()));
 });
-
-// Cache only same-origin static files; never cache API/auth responses.
-self.addEventListener('fetch', event => {
-  const request = event.request;
-  if (request.method !== 'GET') return;
-  const url = new URL(request.url);
-  const scopePath = new URL(self.registration.scope).pathname;
-  if (url.origin !== self.location.origin || !url.pathname.startsWith(scopePath)) return;
-  if (!/\.(?:css|js|png|jpe?g|webp|svg|ico|webmanifest|woff2?)$/i.test(url.pathname)) return;
-  event.respondWith((async () => {
-    try {
-      const response = await fetch(request);
-      if (response.ok && response.type === 'basic') {
-        const cache = await caches.open(CACHE);
-        await cache.put(request, response.clone());
-      }
+self.addEventListener('fetch',event=>{
+  const request=event.request;
+  if(request.method!=='GET')return;
+  const url=new URL(request.url);
+  if(url.origin!==self.location.origin)return;
+  event.respondWith((async()=>{
+    const cache=await caches.open(CACHE_NAME),controller=new AbortController(),timer=setTimeout(()=>controller.abort(),4500);
+    try{
+      const response=await fetch(request,{signal:controller.signal});
+      if(response.ok)await cache.put(request,response.clone());
       return response;
-    } catch {
-      return await caches.match(request) || Response.error();
-    }
-  })());
-});
-
-self.addEventListener('push', event => {
-  let data = {};
-  try { data = event.data ? event.data.json() : {}; }
-  catch { data = { body: event.data?.text() || '' }; }
-  const scope = new URL(self.registration.scope);
-  let target = new URL(data.url || 'admin.html', scope);
-  if (target.origin !== self.location.origin || !target.pathname.startsWith(scope.pathname)) {
-    target = new URL('admin.html', scope);
-  }
-  event.waitUntil(self.registration.showNotification(data.title || 'Base Card', {
-    body: data.body || 'وصل إشعار جديد إلى الإدارة.',
-    icon: new URL('icon-192.png', scope).href,
-    badge: new URL('icon-192.png', scope).href,
-    tag: data.tag || `base-card-${Date.now()}`,
-    vibrate: [250, 100, 250],
-    data: { url: target.href },
-  }));
-});
-
-self.addEventListener('notificationclick', event => {
-  event.notification.close();
-  const scope = new URL(self.registration.scope);
-  let target = new URL(event.notification.data?.url || 'admin.html', scope);
-  if (target.origin !== self.location.origin || !target.pathname.startsWith(scope.pathname)) {
-    target = new URL('admin.html', scope);
-  }
-  event.waitUntil((async () => {
-    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-    for (const client of windows) {
-      if (new URL(client.url).origin === self.location.origin) {
-        await client.navigate(target.href);
-        return await client.focus();
-      }
-    }
-    return await self.clients.openWindow(target.href);
+    }catch(_){
+      return await cache.match(request)||(request.mode==='navigate'?await cache.match(INDEX_URL):Response.error());
+    }finally{clearTimeout(timer)}
   })());
 });
