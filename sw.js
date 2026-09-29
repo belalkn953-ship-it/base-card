@@ -1,6 +1,6 @@
-const CACHE_NAME='base-card-offline-v3';
+const CACHE_NAME='base-card-offline-v4';
 const APP_SHELL=[
-  './','./index.html','./styles.css?v=36','./app.js?v=140',
+  './','./index.html','./styles.css?v=36','./app.js?v=141',
   './supabase-config.js','./km-game-catalog.js?v=4','./my-payments.js?v=3',
   './account-security.js?v=6','./chatapps-fix-v6.js?v=21','./kmcard-ui.js?v=42',
   './transfer-fallback.js?v=8','./manifest.webmanifest'
