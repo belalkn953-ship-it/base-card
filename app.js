@@ -146,9 +146,10 @@ async function loadTrackOrders(force=false){
  try{
   if(!currentUser){const auth=await Promise.race([sb.auth.getUser(),new Promise(resolve=>setTimeout(()=>resolve({data:{user:null}}),5000))]);currentUser=auth?.data?.user||null}
   if(!currentUser){renderTrackGuest();return}
-  let rows=null;
-  try{const data=await trackWithTimeout(sb.functions.invoke(KM_PROXY,{body:{action:'my_orders'}}),5000);if(!data.error&&!data.data?.error)rows=data.data?.orders||[]}catch(_){}
-  if(!rows?.length)rows=await trackWithTimeout(readRecentOrdersFallback(),5000);
+  let rows=null,loaded=false;
+  try{const rpc=await trackWithTimeout(sb.rpc('my_recent_orders_v1'),4000);if(!rpc.error&&Array.isArray(rpc.data)){rows=rpc.data;loaded=true}}catch(_){}
+  if(!loaded){try{const data=await trackWithTimeout(sb.functions.invoke(KM_PROXY,{body:{action:'my_orders'}}),4000);if(!data.error&&!data.data?.error&&Array.isArray(data.data?.orders)){rows=data.data.orders;loaded=true}}catch(_){}}
+  if(!loaded)rows=await trackWithTimeout(readRecentOrdersFallback(),4000);
   const now=Date.now(),cutoff=now-86400000;
   rows=rows.filter(x=>{const created=Date.parse(x.created_at||'');return Number.isFinite(created)&&created>=cutoff&&created<=now});
   const recent=JSON.parse(localStorage.getItem('basecard_recent_km_orders')||'[]').filter(x=>{const created=Date.parse(x.created_at||'');return Number.isFinite(created)&&created>=cutoff&&created<=now});
