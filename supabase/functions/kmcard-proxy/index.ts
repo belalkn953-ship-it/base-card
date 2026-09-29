@@ -245,17 +245,9 @@ Deno.serve(async (req)=>{
       error: 'سجّل الدخول أولًا'
     }, 401);
     if (action === 'my_orders') {
-      const parts = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Damascus',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).formatToParts(new Date());
-      const today = Object.fromEntries(parts.filter((x)=>x.type !== 'literal').map((x)=>[
-          x.type,
-          x.value
-        ]));
-      const start = `${today.year}-${today.month}-${today.day}T00:00:00+03:00`, end = new Date(new Date(start).getTime() + 86400000).toISOString();
+      // Rolling window: show only the user's orders from the last 24 hours.
+      const end = new Date();
+      const start = new Date(end.getTime() - 24 * 60 * 60 * 1000).toISOString();
       const [km, legacy] = await Promise.all([
         admin.from('kmcard_orders').select('order_number,status,provider_status,category_name,product_name,charged_syp,created_at,updated_at').eq('user_id', ud.user.id).gte('created_at', start).lt('created_at', end).order('created_at', {
           ascending: false
