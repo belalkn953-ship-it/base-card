@@ -108,7 +108,7 @@ async function loadWallet(force=false){
   try{
     const [w,t]=await Promise.all([sb.from('wallets').select('*').eq('user_id',userId).maybeSingle(),sb.from('wallet_transactions').select('*').eq('user_id',userId).order('created_at',{ascending:false}).limit(30)]);
     if(requestId!==walletReadSequence||currentUser?.id!==userId)return;
-    if(!w.error){const wallet=w.data||{balance_usd:0,balance_syp:0};if(force||Date.now()-walletSnapshotAt>1800){$('#balanceUsd').textContent=money(wallet.balance_usd,'USD');$('#balanceSyp').textContent=money(wallet.balance_syp,'SYP')}}
+    if(!w.error){const wallet=w.data||{balance_usd:0,balance_syp:0};if(force||Date.now()-walletSnapshotAt>1800){if($('#balanceUsd'))$('#balanceUsd').textContent=money(wallet.balance_usd,'USD');if($('#balanceSyp'))$('#balanceSyp').textContent=money(wallet.balance_syp,'SYP')}}
     if(!t.error){const rows=t.data||[];$('#transactionsTable').innerHTML=rows.length?rows.map(x=>`<div class="transaction-row"><span>${esc(labels[x.type]||x.type)}<small>${esc(String(x.description||'').replace(/KM\s*Card|كيم\s*كارد/ig,'خدمة الشحن'))}<br>${new Date(x.created_at).toLocaleString('ar-SY',{timeZone:'Asia/Damascus'})}</small></span><b class="${Number(x.amount)>=0?'plus':'minus'}">${Number(x.amount)>=0?'+':''}${money(x.amount,x.currency||'SYP')}</b></div>`).join(''):'<div class="empty">لا توجد عمليات بعد.</div>'}
   }catch(_){}
 }
