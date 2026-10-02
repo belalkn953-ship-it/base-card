@@ -32,13 +32,16 @@ const providerId = (x)=>x?.order_id ?? x?.data?.order_id ?? (Array.isArray(x?.da
 const APPROVED_FREE_FIRE_IDS = new Set([276,277,14,20,23,27,31,426,431,436,437,1104]);
 const APPROVED_CHAT_IDS = new Set([6,12,17,22,30,33,35,38,40,42,43,44,45,46,47,49,52,54,56,57,58,59,60,61,62,63,65,66,67,68,69,70,71,72,73,74,76,77,78,79,80,81,82,83,84,85,86,87,88,89,91,92,93,94,96,97,100,101,102,104,107,108,109,110,111,112,266,267,268,275,281,282,283,284,286,287,289,290,291,292,293,294,295,296,297,298,299,300,301,302,304,305,306,307,309,323,754,755,757,789,792,793,794,796,798,799,800,801,817,863,864,865,869,879,881,883,884,885,886,887,890,891,892,893,894,895,896,897,898,900,901,902,904,955,958,981,1010,1017,1037,1043,1048,1071,1085,1086,1087,1088,1089,1093,1094,1103,1105,1113]);
 const APPROVED_PUBG_IDS = new Set([114,115,116,117,118,119,259,311,312,313,314,315,917,918,919,920,996,1018,1019,1020,1023,1024,1025,1027,1029,1030,1031]);
-const PUBLIC_PRODUCT_IDS = new Set([...APPROVED_FREE_FIRE_IDS,...APPROVED_CHAT_IDS,...APPROVED_PUBG_IDS,4,11]);
+const APPROVED_GAME_CATEGORIES = new Set(['8بلياردو','AFK Journey','Blood Strike','Brawl Stars','Call of duty','Clash of Clans','Delta force','FIFA MOBILE FC','Genshin Impact','Hay day','Honkai Star Rail','Marvel Rivals','Mobile Legends','New state mobile','Roblox Global Gards','State of survival','Survival State: Zombie War','Valorant','WOS','YALLA LUDO','Zenless Zone Zero','honor of kings','jawaker tokens','كلاش اوف كلانس عرض','fortnite']);
+const APPROVED_GAME_IDS = new Set([7,13,19,203,204,205,162,163,164,161,206,237,238,239,240,241,814,317,455,571,577,723,813,318,549,573,578,623,956,319,574,579,624,949,812,320,575,580,625,788,321,576,628,790,1078,3,459,1079,460,1080,18,572,10,606,16,782,783,25,29,472,474,475,476,600,601,602,603,604,605,607,608,609,610,611,612,613,614,615,617,618,619,620,621,622,629,630,631,632,633,634,635,637,643,644,645,646,647,648,649,654,655,667,668,669,670,671,672,673,674,675,676,681,682,683,684,685,686,688,689,690,691,692,693,694,695,696,697,698,699,700,720,721,722,725,726,727,728,729,730,731,732,733,734,735,736,737,738,740,741,742,743,744,745,746,747,748,749,815,816,1035,1036,1069,1070,1072,1073,1074,1075,1076,1077,1107,1108,1109,1110,1112,1114]);
+const PUBLIC_PRODUCT_IDS = new Set([...APPROVED_FREE_FIRE_IDS,...APPROVED_CHAT_IDS,...APPROVED_PUBG_IDS,...APPROVED_GAME_IDS,4,11]);
 const providerProductAllowed = (p)=>{
   const id = Number(p?.id);
   const category = String(p?.category_name || '').trim();
   if (id === 4 || id === 11) return true;
   if (/^FREE FIRE GLOBAL$/i.test(category)) return APPROVED_FREE_FIRE_IDS.has(id);
   if (/^PUBG GLOBAL$/i.test(category)) return APPROVED_PUBG_IDS.has(id);
+  if (APPROVED_GAME_CATEGORIES.has(category)) return APPROVED_GAME_IDS.has(id);
   return Number(p?.parent_id) === 6 && APPROVED_CHAT_IDS.has(id);
 };
 const normalizeDigits = (v)=>String(v??'').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
@@ -71,7 +74,7 @@ function calculateChatSale(unitCost, quantity){
   return ((numerator+denominator-1n)/denominator).toString();
 }
 const SECRET_PARAM_KEY='__basecard_encrypted_params_v1';
-function isSensitiveParam(k){return /(password|passcode|كلمة\s*المرور|رمز\s*سري)/i.test(String(k));}
+function isSensitiveParam(k){return /(password|passcode|e-?mail|ايميل|البريد|account|user\s*name|username|secondary\s*auth|verification\s*code|otp|الحساب|اسم\s*المستخدم|كلمة\s*المرور|رمز\s*(سري|التحقق|المصادقة))/i.test(String(k));}
 function bytesToBase64(bytes){let binary='';for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary);}
 function base64ToBytes(text){return Uint8Array.from(atob(text),c=>c.charCodeAt(0));}
 let encryptionKeyPromise;
