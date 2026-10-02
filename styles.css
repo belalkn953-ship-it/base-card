@@ -23,7 +23,7 @@ body.is-offline{overflow:hidden}.offline-overlay{position:fixed;inset:0;z-index:
 #gamesGrid .game-tile .btn{margin:3px 0 0;padding:7px 11px;font-size:11px;pointer-events:none}
 @media(max-width:520px){#gamesGrid.games-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}#gamesGrid .game-tile{border-radius:16px;padding:10px 6px}#gamesGrid .game-tile .emoji{font-size:38px}}
 .contact-card .support-hours{color:var(--green)}
-.km-card-catalog-image{width:66px;height:66px;display:block;margin:4px auto 10px;object-fit:cover;border-radius:13px;border:1px solid #ffffff24;box-shadow:0 8px 18px #0005}
+.km-card-catalog-image{width:66px;height:66px;display:block;margin:4px auto 10px;object-fit:contain;border-radius:13px;border:1px solid #ffffff24;box-shadow:0 8px 18px #0005}
 .game-tile .km-card-catalog-image{width:46px;height:46px;margin:4px auto 2px;border-radius:11px}
 .km-card-catalog-image-fallback{width:66px;height:66px;display:grid;place-items:center;margin:4px auto 10px;border-radius:13px;background:#ffffff10;font-size:34px}
 @media(max-width:520px){.game-tile .km-card-catalog-image{width:42px;height:42px}.game-tile .km-card-catalog-image-fallback{width:42px;height:42px;font-size:30px}}
