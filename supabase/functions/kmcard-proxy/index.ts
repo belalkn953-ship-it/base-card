@@ -36,7 +36,9 @@ const APPROVED_PUBG_IDS = new Set([114,115,116,117,118,119,259,311,312,313,314,3
 const APPROVED_GAME_CATEGORIES = new Set(['8بلياردو','AFK Journey','Blood Strike','Brawl Stars','Call of duty','Clash of Clans','Delta force','FIFA MOBILE FC','Genshin Impact','Hay day','Honkai Star Rail','Marvel Rivals','Mobile Legends','New state mobile','Roblox Global Gards','State of survival','Survival State: Zombie War','Valorant','WOS','YALLA LUDO','Zenless Zone Zero','honor of kings','jawaker tokens','كلاش اوف كلانس عرض','fortnite']);
 const APPROVED_GAME_IDS = new Set([7,13,19,203,204,205,162,163,164,161,206,237,238,239,240,241,814,317,455,571,577,723,813,318,549,573,578,623,956,319,574,579,624,949,812,320,575,580,625,788,321,576,628,790,1078,3,459,1079,460,1080,18,572,10,606,16,782,783,25,29,472,474,475,476,600,601,602,603,604,605,607,608,609,610,611,612,613,614,615,617,618,619,620,621,622,629,630,631,632,633,634,635,637,643,644,645,646,647,648,649,654,655,667,668,669,670,671,672,673,674,675,676,681,682,683,684,685,686,688,689,690,691,692,693,694,695,696,697,698,699,700,720,721,722,725,726,727,728,729,730,731,732,733,734,735,736,737,738,740,741,742,743,744,745,746,747,748,749,815,816,1035,1036,1069,1070,1072,1073,1074,1075,1076,1077,1107,1108,1109,1110,1112,1114]);
 const PUBLIC_PRODUCT_IDS = new Set([...APPROVED_FREE_FIRE_IDS,...APPROVED_CHAT_IDS,...APPROVED_PUBG_IDS,...APPROVED_GAME_IDS,4,11]);
+const hasForbiddenCredentialParams=(p)=>Array.isArray(p?.params)&&p.params.some((k)=>/(password|passcode|secondary\s*auth|(?:verification|authentication|auth)\s*code|\botp\b|\b2fa\b|two[\s_-]*factor|كلمة\s*المرور|رمز\s*(?:سري|التحقق|المصادقة)|التحقق\s*الثنائي)/i.test(String(k)));
 const providerProductAllowed = (p)=>{
+  if(hasForbiddenCredentialParams(p))return false;
   const id = Number(p?.id);
   const category = String(p?.category_name || '').trim();
   if (id === 4 || id === 11) return true;
@@ -190,7 +192,12 @@ Deno.serve(async (req)=>{
     if (action === 'products') {
       const rows=await getProducts();
       const safeFields=['id','name','available','category_name','parent_id','params','product_type','qty_values'];
-      return json({products:rows.filter(p=>PUBLIC_PRODUCT_IDS.has(Number(p.id))).map((p)=>Object.fromEntries(safeFields.filter((k)=>p[k]!==undefined).map((k)=>[k,p[k]])))});
+      const products=rows.filter(p=>PUBLIC_PRODUCT_IDS.has(Number(p.id))).map((p)=>{
+        const safe=Object.fromEntries(safeFields.filter((k)=>p[k]!==undefined).map((k)=>[k,p[k]]));
+        if(hasForbiddenCredentialParams(p)){safe.available=false;safe.params=[];}
+        return safe;
+      });
+      return json({products});
     }
     if(action==='quote'){
       const productId=Number(body.product_id),rawQty=String(body.qty??'');
