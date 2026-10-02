@@ -38,7 +38,5 @@ body.is-offline{overflow:hidden}.offline-overlay{position:fixed;inset:0;z-index:
 #chatappsGrid .chat-fix-card p{font-size:11px;line-height:1.45;margin:0 0 8px;max-width:100%;overflow-wrap:anywhere}
 #chatappsGrid .chat-fix-card .btn{width:100%;max-width:160px;margin-top:auto;padding:8px;font-size:11px}
 @media(max-width:520px){#chatappsGrid.games-grid{gap:8px}#chatappsGrid .chat-fix-card{min-height:205px;padding:12px 6px 10px;border-radius:14px}#chatappsGrid .chat-fix-card .badge{font-size:8px;padding:3px 6px}#chatappsGrid .chat-fix-card .km-card-catalog-image{width:80px;max-height:80px;margin:2px auto 6px}#chatappsGrid .chat-fix-card .km-card-catalog-image-fallback{width:80px;height:80px}#chatappsGrid .chat-fix-card h3{font-size:12px;line-height:1.3;margin:2px 0 4px}#chatappsGrid .chat-fix-card p{font-size:9px;line-height:1.35;margin:0 0 6px}#chatappsGrid .chat-fix-card .btn{max-width:none;padding:6px 4px;font-size:10px;white-space:nowrap}}
-.km-card-image-sprite{background-repeat:no-repeat;background-position:var(--sprite-x) var(--sprite-y);background-color:#0b1220}
-.km-game-image{background-image:url('./assets/km-art/games-sprite.svg');background-size:500% 500%}
-#chatappsLoadMore{display:block;margin:18px auto 30px;min-width:220px}
+.km-card-catalog-image{background-color:#0b1220}
 .chat-fix-back{display:inline-flex;margin:0 0 12px}
