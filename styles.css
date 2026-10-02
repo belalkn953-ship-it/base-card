@@ -22,3 +22,4 @@ body.is-offline{overflow:hidden}.offline-overlay{position:fixed;inset:0;z-index:
 #gamesGrid .game-tile .emoji{position:static;left:auto;bottom:auto;margin:7px 0 2px;font-size:42px;filter:drop-shadow(0 7px 12px #0007)}
 #gamesGrid .game-tile .btn{margin:3px 0 0;padding:7px 11px;font-size:11px;pointer-events:none}
 @media(max-width:520px){#gamesGrid.games-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}#gamesGrid .game-tile{border-radius:16px;padding:10px 6px}#gamesGrid .game-tile .emoji{font-size:38px}}
+.contact-card .support-hours{color:var(--green)}
