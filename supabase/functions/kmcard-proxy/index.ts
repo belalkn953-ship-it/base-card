@@ -18,7 +18,8 @@ const json = (data, status = 200, req)=>new Response(JSON.stringify(data), {
     status,
     headers: {
       ...corsFor(req || new Request("https://localhost")),
-      "Content-Type": "application/json"
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store"
     }
   });
 const base = "https://api.km-card.com";
@@ -54,6 +55,20 @@ const validQuantity = (p, raw)=>{
     try{return q>=scaledBigInt(values.min,6)&&q<=scaledBigInt(values.max,6)}catch(_){return false}
   }
   return q===1000000n;
+};
+const safeOrderParams=(product,submitted)=>{
+  if(!submitted||typeof submitted!=='object'||Array.isArray(submitted))return null;
+  const required=Array.isArray(product?.params)?product.params.map((k)=>String(k)).filter((k)=>k.trim()):[];
+  if(required.length>20||new Set(required).size!==required.length||required.some((k)=>k.length>120||['qty','order_uuid'].includes(k.trim().toLowerCase())))return null;
+  const allowed=new Set(required);
+  if(Object.keys(submitted).some((k)=>!allowed.has(k)))return null;
+  const safe={};
+  for(const key of required){
+    const value=submitted[key];
+    if((typeof value!=='string'&&typeof value!=='number')||String(value).trim()===''||String(value).length>512)return null;
+    safe[key]=String(value).trim();
+  }
+  return safe;
 };
 const CHAT_MARGIN_NUM=114n, CHAT_MARGIN_DEN=100n, CHAT_COST_SCALE=1000000000000000000n, CHAT_QTY_SCALE=1000000n;
 function scaledBigInt(value, scaleDigits){
@@ -183,7 +198,7 @@ Deno.serve(async (req)=>{
       if(!p||Number(p.parent_id)!==6||!providerProductAllowed(p))return json({error:'المنتج غير متاح حاليًا'},400,req);
       if(!validQuantity(p,rawQty))return json({error:'الكمية غير صحيحة أو خارج حدود المنتج'},400,req);
       if(!Number(p.price)||Number(p.price)<=0)return json({error:'تعذر تحديد السعر حاليًا'},503,req);
-      return json({sale_price_syp:calculateChatSale(p.price,rawQty),currency:'SYP',margin_percent:14},200,req);
+      return json({sale_price_syp:calculateChatSale(p.price,rawQty),currency:'SYP'},200,req);
     }
     // Called only by a trusted pg_cron/pg_net job. Never expose this to browser users.
     if (action === 'poll') {
@@ -197,8 +212,10 @@ Deno.serve(async (req)=>{
         'processing'
       ]).order('created_at').limit(50);
       if (error) throw error;
+      const pendingRows=rows||[];
+      const retryProducts=pendingRows.some((row)=>!row.provider_order_id)?await getProducts(true):[];
       const results = [];
-      for (const row of rows || []){
+      for (const row of pendingRows){
         let result;
         let retryParams={};
         if (row.provider_order_id) {
@@ -206,16 +223,28 @@ Deno.serve(async (req)=>{
             row.provider_order_id
           ]))}`);
         } else {
-          // Safe retry: the persisted UUID makes KM Card idempotent and prevents duplicate fulfillment.
-          const q = new URLSearchParams({
-            qty: String(row.quantity),
-            order_uuid: String(row.order_uuid)
-          });
-          retryParams=await revealParams(row.params||{});
-          for (const [k, v] of Object.entries(retryParams)){
-            if (v !== undefined && v !== null) q.set(k, String(v));
+          const product=retryProducts.find((p)=>Number(p.id)===Number(row.product_id)&&p.available!==false);
+          const rejectUnsafeRetry=async(reason)=>{
+            const final=await finalize(row,{error:reason},'reject',true);
+            await audit({user_id:row.user_id,request_id:crypto.randomUUID(),event_type:'validation_rejected',product_id:Number(row.product_id),quantity:Number(row.quantity),order_id:Number(row.id),provider_status:'reject',reason_code:reason});
+            results.push({id:row.id,status:final?.status||'rejected'});
+          };
+          if(!product||!providerProductAllowed(product)||!validQuantity(product,String(row.quantity))){
+            await rejectUnsafeRetry('retry_product_or_quantity_invalid');
+            continue;
           }
-          result = await provider(`/client/api/newOrder/${Number(row.product_id)}/params?${q.toString()}`);
+          retryParams=safeOrderParams(product,await revealParams(row.params||{}));
+          if(retryParams===null){
+            await rejectUnsafeRetry('retry_params_invalid');
+            continue;
+          }
+          const attempt=await admin.rpc('register_kmcard_order_attempt',{p_user_id:row.user_id,p_request_id:crypto.randomUUID(),p_product_id:Number(row.product_id),p_quantity:Number(row.quantity),p_limit:10});
+          if(attempt.error)throw attempt.error;
+          if(!attempt.data?.allowed){results.push({id:row.id,status:row.status,deferred:true});continue;}
+          // Only catalog-declared parameters are forwarded; quantity and idempotency stay server-owned.
+          const q = new URLSearchParams({qty:String(row.quantity),order_uuid:String(row.order_uuid)});
+          for (const [k, v] of Object.entries(retryParams)) q.set(k, String(v));
+          result = await provider(`/client/api/newOrder/${Number(product.id)}/params?${q.toString()}`);
         }
         const rawStatus = providerStatus(row.provider_order_id ? (result?.data || [])[0] || result : result);
         const status = providerBalanceError(result) ? 'reject' : rawStatus;
@@ -268,7 +297,7 @@ Deno.serve(async (req)=>{
           ...(km.data || []).map((x)=>({
               ...x,
               source: 'kmcard',
-              title: x.category_name || 'KM Card',
+              title: x.category_name || 'خدمة الشحن',
               package_name: x.product_name,
               amount: x.charged_syp,
               currency: 'SYP'
@@ -335,19 +364,14 @@ Deno.serve(async (req)=>{
         const serverQuote=calculateChatSale(p.price,qtyRaw);
         if(String(body.quoted_sale_price_syp??'')!==serverQuote)return json({error:'تغيّر السعر؛ حدّث السعر قبل الشراء'},409,req);
       }
-      const required = Array.isArray(p.params) ? p.params.filter((k)=>String(k).trim()) : [];
-      const missing = required.filter((k)=>{
-        const v = params[String(k)];
-        return v === undefined || v === null || String(v).trim() === '';
-      });
-      if (missing.length) {
+      const paramsWithPlayer=safeOrderParams(p,params);
+      if(paramsWithPlayer===null){
         await audit({
           user_id: ud.user.id, request_id: requestId, event_type: 'validation_rejected',
-          product_id: productId, quantity: qty, reason_code: 'required_fields_missing'
+          product_id: productId, quantity: qty, reason_code: 'invalid_or_unexpected_params'
         });
         return json({ error: 'المعلومات غير صحيحة أو ناقصة، حاول مرة أخرى' }, 400, req);
       }
-      const paramsWithPlayer=params;
       const storedParams=await protectParams(paramsWithPlayer);
       const created=isChatProduct
         ? await admin.rpc('create_kmcard_chat_order',{
@@ -355,8 +379,8 @@ Deno.serve(async (req)=>{
             p_category_name:String(p.category_name||''),p_quantity:qtyRaw,
             p_provider_unit_cost_syp:String(p.price),p_params:storedParams,p_order_uuid:body.idempotency_key||null
           })
-        : await userClient.rpc('create_kmcard_order',{
-            p_product_id:Number(p.id),p_product_name:String(p.name||''),p_category_name:String(p.category_name||''),
+        : await admin.rpc('create_kmcard_order_internal',{
+            p_user_id:ud.user.id,p_product_id:Number(p.id),p_product_name:String(p.name||''),p_category_name:String(p.category_name||''),
             p_quantity:qty,p_price_usd:Number(p.price),p_params:storedParams,p_order_uuid:body.idempotency_key||null,p_sale_price_syp:null
           });
       if (created.error) {
@@ -369,8 +393,16 @@ Deno.serve(async (req)=>{
         return json({ok:false,error:safeError,charged_syp:0,refunded:false},400,req);
       }
       const row = created.data;
+      const savedResult=await admin.from('kmcard_orders').select('id,user_id,product_id,quantity,params,order_uuid,provider_order_id,status,provider_status,order_number,charged_syp').eq('id',Number(row?.id)).eq('user_id',ud.user.id).maybeSingle();
+      if(savedResult.error||!savedResult.data)throw new Error('تعذر التحقق من الطلب المحفوظ');
+      const saved=savedResult.data;
+      const savedParams=safeOrderParams(p,await revealParams(saved.params||{}));
+      if(Number(saved.product_id)!==productId||Number(saved.quantity)!==qty||savedParams===null||JSON.stringify(savedParams)!==JSON.stringify(paramsWithPlayer)){
+        await audit({user_id:ud.user.id,request_id:requestId,event_type:'validation_rejected',product_id:productId,quantity:qty,order_id:Number(saved.id),reason_code:'idempotency_payload_mismatch'});
+        return json({error:'رقم الطلب مستخدم لبيانات مختلفة؛ أنشئ طلبًا جديدًا'},409,req);
+      }
       // A repeated browser submission returns the persisted order and never submits a second provider request.
-      if (row?.already_exists && (row.provider_order_id || ['completed','rejected','refunded'].includes(String(row.status||'').toLowerCase()))) {
+      if (row?.already_exists && (saved.provider_order_id || ['completed','rejected','refunded'].includes(String(saved.status||'').toLowerCase()))) {
         await audit({
           user_id: ud.user.id, request_id: requestId, event_type: 'idempotent_repeat',
           product_id: productId, quantity: qty, order_id: Number(row.id),
@@ -378,11 +410,11 @@ Deno.serve(async (req)=>{
         });
         return json({
           ok: true,
-          order_id: row.id,
-          order_number: row.order_number,
-          status: row.status,
-          provider_status: row.provider_status,
-          charged_syp: row.charged_syp,
+          order_id: saved.id,
+          order_number: saved.order_number,
+          status: saved.status,
+          provider_status: saved.provider_status,
+          charged_syp: saved.charged_syp,
           balance_after: row.balance_after ?? null,
           balance_currency: 'SYP'
         });
@@ -436,7 +468,6 @@ Deno.serve(async (req)=>{
         order_number: row.order_number,
         status: final?.status || status,
         provider_status: status,
-        provider_order_id: providerId(result),
         charged_syp: row.charged_syp,
         balance_after: walletAfter?Number(walletAfter.balance_syp):null,
         balance_currency: 'SYP',
@@ -449,7 +480,7 @@ Deno.serve(async (req)=>{
       if (!rowId && !orderNumber) return json({
         error: 'رقم الطلب غير صالح'
       }, 400);
-      let query = userClient.from('kmcard_orders').select('*').eq('user_id', ud.user.id);
+      let query = admin.from('kmcard_orders').select('*').eq('user_id', ud.user.id);
       query = rowId ? query.eq('id', rowId) : query.eq('order_number', orderNumber);
       const { data: row, error: re } = await query.single();
       if (re || !row) return json({
