@@ -24,7 +24,7 @@
 
 ```bash
 cp .env.example .env
-# عدّل ADMIN_PASSWORD داخل .env قبل التشغيل
+# أدخل اسم مستخدم فريدًا وكلمة مرور خاصة لا تقل عن 16 حرفًا في .env
 npm install
 npm start
 ```
@@ -37,8 +37,8 @@ npm start
 ## متغيرات البيئة
 
 - `PORT`: المنفذ، الافتراضي 3000.
-- `ADMIN_USERNAME`: اسم المستخدم الأول، الافتراضي admin.
-- `ADMIN_PASSWORD`: كلمة مرور المشرف الأول، يجب تغييرها.
+- `ADMIN_USERNAME`: اسم المستخدم الأول، مطلوب عند إنشاء قاعدة البيانات لأول مرة.
+- `ADMIN_PASSWORD`: كلمة مرور المشرف الأول، مطلوبة ويجب ألا تقل عن 16 حرفًا.
 - `SESSION_DAYS`: مدة جلسة الدخول بالأيام.
 - `NODE_ENV=production`: لتفعيل Secure Cookies عند استخدام HTTPS.
 - `GOOGLE_CLIENT_ID` و`GOOGLE_CLIENT_SECRET`: بيانات تطبيق Google OAuth.

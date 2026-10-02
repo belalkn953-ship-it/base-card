@@ -117,10 +117,13 @@ for (const [key, value] of Object.entries(settingDefaults)) {
   if (!db.prepare('SELECT key FROM settings WHERE key=?').get(key)) upsertSetting.run(key, value);
 }
 if (!db.prepare('SELECT id FROM admins LIMIT 1').get()) {
-  const username = process.env.ADMIN_USERNAME || 'admin';
-  const password = process.env.ADMIN_PASSWORD || 'change-this-immediately';
+  const username = String(process.env.ADMIN_USERNAME || '').trim();
+  const password = String(process.env.ADMIN_PASSWORD || '');
+  if (!username || password.length < 16) {
+    throw new Error('Before first startup, set ADMIN_USERNAME and a unique ADMIN_PASSWORD of at least 16 characters.');
+  }
   db.prepare('INSERT INTO admins(username,password_hash) VALUES (?,?)').run(username, bcrypt.hashSync(password, 12));
-  console.log(`Admin created: ${username}. Change ADMIN_PASSWORD before production.`);
+  console.log('Initial administrator account created from environment settings.');
 }
 if (!db.prepare('SELECT id FROM games LIMIT 1').get()) {
   const addGame = db.prepare('INSERT INTO games(name,slug,icon,description,sort_order) VALUES (?,?,?,?,?)');
@@ -137,7 +140,6 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
-app.use('/uploads', express.static(UPLOAD_DIR));
 app.use(express.static(path.join(ROOT, 'public')));
 
 const orderLimiter = rateLimit({ windowMs: 10 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false });
@@ -160,8 +162,7 @@ const gameRows = (visibleOnly = false) => db.prepare(`SELECT * FROM games ${visi
 const packageRows = (visibleOnly = false) => db.prepare(`SELECT p.*,g.name game_name,g.slug game_slug FROM packages p JOIN games g ON g.id=p.game_id ${visibleOnly ? 'WHERE p.visible=1 AND g.visible=1' : ''} ORDER BY p.game_id,p.sort_order,p.id`).all();
 const publicOrder = row => ({
   order_number: row.order_number, game: row.game_name, package: row.package_name,
-  player_id: row.player_id, customer_name: row.customer_name, status: row.status,
-  admin_note: row.admin_note, created_at: row.created_at, updated_at: row.updated_at
+  status: row.status, created_at: row.created_at, updated_at: row.updated_at
 });
 
 function createOrderNumber() {
@@ -179,6 +180,20 @@ function auth(req, res, next) {
   req.admin = session;
   next();
 }
+app.get('/uploads/:filename', (req, res) => {
+  const filename = String(req.params.filename || '');
+  if (!filename || filename.includes('/') || filename.includes(String.fromCharCode(92)) || path.basename(filename) !== filename) return res.status(404).end();
+  const file = path.join(UPLOAD_DIR, filename);
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return res.status(404).end();
+  const qrSetting = String(db.prepare('SELECT value FROM settings WHERE key=?').get('sham_cash_qr')?.value || '');
+  const qrFilename = path.basename(qrSetting.split('?')[0]);
+  if (filename === qrFilename) return res.sendFile(file);
+  auth(req, res, () => {
+    const receipt = db.prepare('SELECT id FROM orders WHERE receipt_path=?').get(`/uploads/${filename}`);
+    if (!receipt) return res.status(404).end();
+    return res.sendFile(file);
+  });
+});
 function currentCustomer(req) {
   const raw = req.cookies.base_card_user;
   if (!raw) return null;
@@ -226,7 +241,7 @@ app.post('/api/orders', orderLimiter, upload.single('receipt'), (req, res) => {
     res.status(201).json({ order_number: orderNumber, message: 'تم استلام طلبك بنجاح' });
   } catch (e) { res.status(500).json({ error: 'تعذر حفظ الطلب حاليًا' }); }
 });
-app.get('/api/orders/:number', (req, res) => {
+app.get('/api/orders/:number', orderLimiter, (req, res) => {
   const row = db.prepare(`SELECT o.*,g.name game_name,p.name package_name FROM orders o JOIN games g ON g.id=o.game_id JOIN packages p ON p.id=o.package_id WHERE o.order_number=?`).get(clean(req.params.number, 60));
   if (!row) return res.status(404).json({ error: 'لم يتم العثور على هذا الطلب' });
   res.json(publicOrder(row));
