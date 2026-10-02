@@ -27,3 +27,14 @@ body.is-offline{overflow:hidden}.offline-overlay{position:fixed;inset:0;z-index:
 .game-tile .km-card-catalog-image{width:46px;height:46px;margin:4px auto 2px;border-radius:11px}
 .km-card-catalog-image-fallback{width:66px;height:66px;display:grid;place-items:center;margin:4px auto 10px;border-radius:13px;background:#ffffff10;font-size:34px}
 @media(max-width:520px){.game-tile .km-card-catalog-image{width:42px;height:42px}.game-tile .km-card-catalog-image-fallback{width:42px;height:42px;font-size:30px}}
+#chatappsGrid.games-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+#chatappsGrid>.km-status{grid-column:1/-1}
+#chatappsGrid .chat-fix-card{display:flex;flex-direction:column;align-items:center;text-align:center;min-width:0;min-height:220px;padding:16px 12px 14px}
+#chatappsGrid .chat-fix-card>*{position:relative;z-index:1}
+#chatappsGrid .chat-fix-card .badge{align-self:center;max-width:100%;font-size:9px;white-space:nowrap}
+#chatappsGrid .chat-fix-card .km-card-catalog-image{width:96px;height:auto;max-width:100%;max-height:96px;object-fit:contain;margin:4px auto 8px}
+#chatappsGrid .chat-fix-card .km-card-catalog-image-fallback{width:96px;height:96px}
+#chatappsGrid .chat-fix-card h3{font-size:16px;line-height:1.35;margin:2px 0 5px}
+#chatappsGrid .chat-fix-card p{font-size:11px;line-height:1.45;margin:0 0 8px;max-width:100%;overflow-wrap:anywhere}
+#chatappsGrid .chat-fix-card .btn{width:100%;max-width:160px;margin-top:auto;padding:8px;font-size:11px}
+@media(max-width:520px){#chatappsGrid.games-grid{gap:8px}#chatappsGrid .chat-fix-card{min-height:205px;padding:12px 6px 10px;border-radius:14px}#chatappsGrid .chat-fix-card .badge{font-size:8px;padding:3px 6px}#chatappsGrid .chat-fix-card .km-card-catalog-image{width:80px;max-height:80px;margin:2px auto 6px}#chatappsGrid .chat-fix-card .km-card-catalog-image-fallback{width:80px;height:80px}#chatappsGrid .chat-fix-card h3{font-size:12px;line-height:1.3;margin:2px 0 4px}#chatappsGrid .chat-fix-card p{font-size:9px;line-height:1.35;margin:0 0 6px}#chatappsGrid .chat-fix-card .btn{max-width:none;padding:6px 4px;font-size:10px;white-space:nowrap}}
