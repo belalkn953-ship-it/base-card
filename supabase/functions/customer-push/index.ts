@@ -59,9 +59,9 @@ function gameAndPackage(order: Record<string,unknown>) {
   const id=Number(order.product_id);
   const category=String(order.category_name||"");
   if(/free\s*fire/i.test(category) || FREE_FIRE_NAMES[id])
-    return {game:"Free Fire",pack:FREE_FIRE_NAMES[id]||String(order.product_name||"باقة شحن")};
+    return {game:"فري فاير",pack:FREE_FIRE_NAMES[id]||String(order.product_name||"باقة شحن")};
   if(/pubg/i.test(category))
-    return {game:"PUBG Mobile",pack:String(order.product_name||"باقة شحن").replace(/\bUC\b/g,"شدّة")};
+    return {game:"ببجي موبايل",pack:String(order.product_name||"باقة شحن").replace(/\bUC\b/g,"شدّة")};
   return {game:category||"طلب الشحن",pack:String(order.product_name||"باقة الشحن")};
 }
 function makeNotice(eventType: string, row: Record<string,unknown>) {
