@@ -64,6 +64,13 @@ function gameAndPackage(order: Record<string,unknown>) {
     return {game:"ببجي موبايل",pack:String(order.product_name||"باقة شحن").replace(/\bUC\b/g,"شدّة")};
   return {game:category||"طلب الشحن",pack:String(order.product_name||"باقة الشحن")};
 }
+function makeLegacyOrderNotice(order: Record<string,unknown>) {
+  const game=String(order.game_name||"اللعبة");
+  const pack=String(order.package_name||"الباقة");
+  const status=String(order.status||"").toLowerCase();
+  if(status==="completed") return {title:"طلبك مكتمل ✅",body:`${game} — ${pack}`,url:`${SITE}?from_notification=1#track`};
+  return {title:"تحديث طلب الشحن",body:`رُفض طلب ${game} — ${pack} ❌ وأُعيد المبلغ إلى محفظتك.`,url:`${SITE}?from_notification=1#track`};
+}
 function makeNotice(eventType: string, row: Record<string,unknown>) {
   if(eventType==="topup"){
     const amount=fmt(row.amount),currency=String(row.currency||"SYP").toUpperCase();
@@ -109,7 +116,7 @@ Deno.serve(async (req)=>{
     return json({ok:true,vapid_public_key_matches:publicKey==="BOhOHy7ksU9bMr2Km-BHa-dn09zJ3qPw68WeDrWgfogDQ7GgPe0PHFsFjlHaAk3SmH9mP7GHragD0RM5HNLowSg",vapid_key_pair_valid:keyPairValid,web_push_runtime:true});
   }
   const eventId=Number(body.event_id),eventType=String(body.event_type||""),recordId=Number(body.record_id);
-  if(!Number.isSafeInteger(eventId)||eventId<=0||!Number.isSafeInteger(recordId)||recordId<=0||!(["topup","kmcard_order"].includes(eventType)))
+  if(!Number.isSafeInteger(eventId)||eventId<=0||!Number.isSafeInteger(recordId)||recordId<=0||!(["topup","kmcard_order","legacy_order"].includes(eventType)))
     return json({error:"invalid_event"},400);
 
   const admin=createClient(supabaseUrl,serviceKey,{auth:{autoRefreshToken:false,persistSession:false}});
@@ -131,11 +138,21 @@ Deno.serve(async (req)=>{
         creditedAmount=Number(tx?.amount||0);
       }
       notice=makeNotice("topup",{...topup,credited_amount:creditedAmount});
-    } else {
+    } else if(eventType==="kmcard_order") {
       const {data:order,error}=await admin.from("kmcard_orders").select("id,user_id,product_id,product_name,category_name,status,provider_status,provider_response").eq("id",recordId).maybeSingle();
       if(error||!order||!["completed","rejected","refunded"].includes(String(order.status))) throw new Error("order_not_final");
       userId=String(order.user_id||"");
       notice=makeNotice("kmcard_order",order);
+    } else {
+      const {data:order,error}=await admin.from("orders").select("id,user_id,game_id,package_id,status").eq("id",recordId).maybeSingle();
+      if(error||!order||!["completed","rejected"].includes(String(order.status))) throw new Error("legacy_order_not_final");
+      const [{data:game,error:gameError},{data:pack,error:packError}]=await Promise.all([
+        admin.from("games").select("name").eq("id",order.game_id).maybeSingle(),
+        admin.from("packages").select("name").eq("id",order.package_id).maybeSingle()
+      ]);
+      if(gameError||packError) throw new Error("legacy_order_details_unavailable");
+      userId=String(order.user_id||"");
+      notice=makeLegacyOrderNotice({...order,game_name:game?.name,package_name:pack?.name});
     }
     if(!userId||!notice) throw new Error("notification_recipient_missing");
 
