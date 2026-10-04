@@ -30,6 +30,18 @@ const providerStatus = (x)=>{
 const providerBalanceError = (x)=>/(insufficient|not enough|no balance|رصيد|balance|funds|credit)/i.test(JSON.stringify(x || ''));
 const baseStatus = (s)=>s === 'wait' ? 'pending' : s;
 const providerId = (x)=>x?.order_id ?? x?.data?.order_id ?? (Array.isArray(x?.data) ? x.data[0]?.order_id : null) ?? null;
+const SAFE_TARGET_KEYS=new Set(['userid','useridhere','playerid','playeridhere','uid','gameid','ايدياللاعب','أيدياللاعب','ايديالمستخدم','أيديالمستخدم','ايديالمسنخدم','ايديالمستحدم','معرفالمستخدم','معرّفالمستخدم','معرفاللاعب','معرّفاللاعب']);
+function safeTargetId(params,productId,category){
+  if([4,11].includes(Number(productId))||/syriatel|mtn|ام\s*تي\s*ان/i.test(String(category||'')))return '';
+  if(!params||typeof params!=='object'||Array.isArray(params))return '';
+  for(const [key,value] of Object.entries(params)){
+    const normalized=String(key).toLowerCase().replace(/[\s_:-]+/g,'');
+    if(!SAFE_TARGET_KEYS.has(normalized)||(typeof value!=='string'&&typeof value!=='number'))continue;
+    const id=String(value).replace(/[\u0000-\u001f\u007f]/g,'').trim();
+    if(id&&id.length<=80)return id;
+  }
+  return '';
+}
 const APPROVED_FREE_FIRE_IDS = new Set([276,277,14,20,23,27,31,426,431,436,437,1104]);
 const APPROVED_CHAT_IDS = new Set([6,12,17,22,30,33,35,38,40,42,43,44,45,46,47,49,52,54,56,57,58,59,60,61,62,63,65,66,67,68,69,70,71,72,73,74,76,77,78,79,80,81,82,83,84,85,86,87,88,89,91,92,93,94,96,97,100,101,102,104,107,108,109,110,111,112,266,267,268,275,281,282,283,284,286,287,289,290,291,292,293,294,295,296,297,298,299,300,301,302,304,305,306,307,309,323,754,755,757,789,792,793,794,796,798,799,800,801,817,863,864,865,869,879,881,883,884,885,886,887,890,891,892,893,894,895,896,897,898,900,901,902,904,955,958,981,1010,1017,1037,1043,1048,1071,1085,1086,1087,1088,1089,1093,1094,1103,1105,1113]);
 const APPROVED_PUBG_IDS = new Set([114,115,116,117,118,119,259,311,312,313,314,315,917,918,919,920,996,1018,1019,1020,1023,1024,1025,1027,1029,1030,1031]);
@@ -288,10 +300,10 @@ Deno.serve(async (req)=>{
       const end = new Date();
       const start = new Date(end.getTime() - 24 * 60 * 60 * 1000).toISOString();
       const [km, legacy] = await Promise.all([
-        admin.from('kmcard_orders').select('order_number,status,provider_status,category_name,product_name,charged_syp,created_at,updated_at').eq('user_id', ud.user.id).gte('created_at', start).lt('created_at', end).order('created_at', {
+        admin.from('kmcard_orders').select('order_number,status,provider_status,product_id,category_name,product_name,params,charged_syp,created_at,updated_at').eq('user_id', ud.user.id).gte('created_at', start).lt('created_at', end).order('created_at', {
           ascending: false
         }),
-        admin.from('orders').select('order_number,status,game_id,package_id,created_at,updated_at').eq('user_id', ud.user.id).gte('created_at', start).lt('created_at', end).order('created_at', {
+        admin.from('orders').select('order_number,status,game_id,package_id,player_id,created_at,updated_at').eq('user_id', ud.user.id).gte('created_at', start).lt('created_at', end).order('created_at', {
           ascending: false
         })
       ]);
@@ -301,19 +313,16 @@ Deno.serve(async (req)=>{
       const packageMap=new Map((oldPackages.data||[]).map((x)=>[Number(x.id),x]));
       return json({
         orders: [
-          ...(km.data || []).map((x)=>({
-              ...x,
-              source: 'kmcard',
-              title: x.category_name || 'خدمة الشحن',
-              package_name: x.product_name,
-              amount: x.charged_syp,
-              currency: 'SYP'
-            })),
-          ...(legacy.data || []).map((x)=>{const pkg=packageMap.get(Number(x.package_id));return {
-              ...x,
+          ...(km.data || []).map((x)=>{
+              const {params,product_id,...safe}=x;
+              return {...safe,source:'kmcard',title:x.category_name||'خدمة الشحن',package_name:x.product_name,amount:x.charged_syp,currency:'SYP',target_id:safeTargetId(params,product_id,x.category_name)||null};
+            }),
+          ...(legacy.data || []).map((x)=>{const pkg=packageMap.get(Number(x.package_id));const {player_id,...safe}=x;return {
+              ...safe,
               source: 'legacy',
               title: 'طلب شحن',
               package_name: pkg?.name||'—',
+              target_id: player_id||null,
               amount: Number(pkg?.price_amount??pkg?.price??0),
               currency: pkg?.currency||'SYP'
             }})

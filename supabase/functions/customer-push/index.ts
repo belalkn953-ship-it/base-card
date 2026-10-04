@@ -55,6 +55,18 @@ function findPlayerName(value: unknown, depth=0): string {
   }
   return "";
 }
+const SAFE_TARGET_KEYS=new Set(["userid","useridhere","playerid","playeridhere","uid","gameid","ايدياللاعب","أيدياللاعب","ايديالمستخدم","أيديالمستخدم","ايديالمسنخدم","ايديالمستحدم","معرفالمستخدم","معرّفالمستخدم","معرفاللاعب","معرّفاللاعب"]);
+function findTargetId(params: unknown,productId: unknown,category: unknown): string {
+  if([4,11].includes(Number(productId))||/syriatel|mtn|ام\s*تي\s*ان/i.test(String(category||""))) return "";
+  if(!params||typeof params!=="object"||Array.isArray(params)) return "";
+  for(const [key,value] of Object.entries(params as Record<string,unknown>)){
+    const normalized=key.toLowerCase().replace(/[\s_:-]+/g,"");
+    if(!SAFE_TARGET_KEYS.has(normalized)||(typeof value!=="string"&&typeof value!=="number")) continue;
+    const id=String(value).replace(/[\u0000-\u001f\u007f]/g,"").trim();
+    if(id&&id.length<=80) return id;
+  }
+  return "";
+}
 function gameAndPackage(order: Record<string,unknown>) {
   const id=Number(order.product_id);
   const category=String(order.category_name||"");
@@ -68,7 +80,8 @@ function makeLegacyOrderNotice(order: Record<string,unknown>) {
   const game=String(order.game_name||"اللعبة");
   const pack=String(order.package_name||"الباقة");
   const status=String(order.status||"").toLowerCase();
-  if(status==="completed") return {title:"طلبك مكتمل ✅",body:`${game} — ${pack}`,url:`${SITE}?from_notification=1#track`};
+  const targetId=String(order.player_id||"").replace(/[\u0000-\u001f\u007f]/g,"").trim().slice(0,80);
+  if(status==="completed") return {title:"طلبك مكتمل ✅",body:`${game} — ${pack}${targetId?` — المعرّف: ${targetId}`:""}`,url:`${SITE}?from_notification=1#track`};
   return {title:"تحديث طلب الشحن",body:`رُفض طلب ${game} — ${pack} ❌ وأُعيد المبلغ إلى محفظتك.`,url:`${SITE}?from_notification=1#track`};
 }
 function makeNotice(eventType: string, row: Record<string,unknown>) {
@@ -86,9 +99,11 @@ function makeNotice(eventType: string, row: Record<string,unknown>) {
   }
   const {game,pack}=gameAndPackage(row);
   const playerName=findPlayerName(row.provider_response);
+  const targetId=findTargetId(row.params,row.product_id,row.category_name);
   if(["completed","accept","accepted"].includes(String(row.status||"").toLowerCase())){
     const extra=playerName?` اسم اللاعب: ${playerName}.`:"";
-    return {title:"طلبك مكتمل ✅",body:`${game} — ${pack}.${extra}`,url:`${SITE}?from_notification=1#track`};
+    const extraId=targetId?` معرّف اللاعب/المستخدم: ${targetId}.`:"";
+    return {title:"طلبك مكتمل ✅",body:`${game} — ${pack}.${extra}${extraId}`,url:`${SITE}?from_notification=1#track`};
   }
   const extra=playerName?` اسم اللاعب: ${playerName}.`:"";
   return {title:"تعذر إكمال طلب الشحن",body:`لم يكتمل طلب ${game} — ${pack}.${extra} ❌ وأُعيد المبلغ إلى محفظتك.`,url:`${SITE}?from_notification=1#track`};
@@ -139,12 +154,12 @@ Deno.serve(async (req)=>{
       }
       notice=makeNotice("topup",{...topup,credited_amount:creditedAmount});
     } else if(eventType==="kmcard_order") {
-      const {data:order,error}=await admin.from("kmcard_orders").select("id,user_id,product_id,product_name,category_name,status,provider_status,provider_response").eq("id",recordId).maybeSingle();
+      const {data:order,error}=await admin.from("kmcard_orders").select("id,user_id,product_id,product_name,category_name,status,provider_status,provider_response,params").eq("id",recordId).maybeSingle();
       if(error||!order||!["completed","rejected","refunded"].includes(String(order.status))) throw new Error("order_not_final");
       userId=String(order.user_id||"");
       notice=makeNotice("kmcard_order",order);
     } else {
-      const {data:order,error}=await admin.from("orders").select("id,user_id,game_id,package_id,status").eq("id",recordId).maybeSingle();
+      const {data:order,error}=await admin.from("orders").select("id,user_id,game_id,package_id,player_id,status").eq("id",recordId).maybeSingle();
       if(error||!order||!["completed","rejected"].includes(String(order.status))) throw new Error("legacy_order_not_final");
       const [{data:game,error:gameError},{data:pack,error:packError}]=await Promise.all([
         admin.from("games").select("name").eq("id",order.game_id).maybeSingle(),
