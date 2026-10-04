@@ -1,9 +1,9 @@
-const CACHE_NAME='base-card-offline-v29';
+const CACHE_NAME='base-card-offline-v30';
 const APP_SHELL=[
   './','./index.html','./styles.css?v=49','./app.js?v=162',
   './supabase-config.js','./km-game-catalog.js?v=4','./km-images.js?v=5','./my-payments.js?v=3',
   './account-security.js?v=6','./chatapps-fix-v6.js?v=28','./kmcard-ui.js?v=45',
-  './transfer-fallback.js?v=9','./manifest.webmanifest'
+  './transfer-fallback.js?v=9','./manifest.webmanifest?v=2','./icon-192.png?v=2','./icon-512.png?v=2','./icon-192-maskable.png?v=2','./icon-512-maskable.png?v=2'
 ];
 const INDEX_URL=new URL('./index.html',self.registration.scope).href;
 self.addEventListener('install',event=>{
@@ -43,7 +43,7 @@ self.addEventListener('push',event=>{
   const title=String(info.title||payload.title||data.title||'تنبيه من Base Card').slice(0,80);
   const body=String(info.body||info.message||payload.body||payload.message||data.body||data.message||'وصل طلب شحن أو رسالة دعم جديدة إلى الموقع.').slice(0,220);
   const url=isCustomer?customerNotificationUrl(info.url||payload.url||data.url,section):adminNotificationUrl(info.url||payload.url||data.url,tab);
-  const options={body,icon:new URL('./icon-192.png',self.registration.scope).href,badge:new URL('./icon-192.png',self.registration.scope).href,data:{url,eventType,audience:isCustomer?'customer':'admin'}};
+  const options={body,icon:new URL('./icon-192.png?v=2',self.registration.scope).href,badge:new URL('./icon-192.png?v=2',self.registration.scope).href,data:{url,eventType,audience:isCustomer?'customer':'admin'}};
   event.waitUntil(self.registration.showNotification(title,options));
 });
 self.addEventListener('notificationclick',event=>{
