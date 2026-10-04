@@ -130,6 +130,26 @@ Deno.serve(async (req)=>{
     try{webpush.setVapidDetails(SITE,publicKey,privateKey);keyPairValid=true}catch(_){keyPairValid=false}
     return json({ok:true,vapid_public_key_matches:publicKey==="BOhOHy7ksU9bMr2Km-BHa-dn09zJ3qPw68WeDrWgfogDQ7GgPe0PHFsFjlHaAk3SmH9mP7GHragD0RM5HNLowSg",vapid_key_pair_valid:keyPairValid,web_push_runtime:true});
   }
+  if(body.action==="test"){
+    const userId=String(body.user_id||"");
+    if(!/^[0-9a-f-]{36}$/i.test(userId)) return json({error:"invalid_test_target"},400);
+    const testAdmin=createClient(supabaseUrl,serviceKey,{auth:{autoRefreshToken:false,persistSession:false}});
+    const {data:profile,error:pError}=await testAdmin.from("profiles").select("role").eq("id",userId).maybeSingle();
+    if(pError||profile?.role!=="admin") return json({error:"test_target_not_admin"},403);
+    const {data:subs,error:sError}=await testAdmin.from("customer_push_subscriptions").select("id,endpoint,p256dh,auth").eq("user_id",userId).limit(10);
+    if(sError) return json({error:"subscription_lookup_failed"},500);
+    if(!subs?.length) return json({ok:true,sent:0,failed:0});
+    webpush.setVapidDetails(SITE,publicKey,privateKey);
+    const testUrl=`${SITE}?from_notification=1#track`;
+    const payload=JSON.stringify({audience:"customer",type:"customer_test",title:"اختبار إشعارات Base Card",body:"هذه رسالة اختبار للتأكد من وصول الإشعارات. لم يتم إنشاء طلب أو خصم رصيد.",url:testUrl,data:{audience:"customer",type:"customer_test",url:testUrl}});
+    let sent=0,failed=0;
+    for(const sub of subs){
+      if(!isAllowedEndpoint(String(sub.endpoint||""))){failed++;await testAdmin.from("customer_push_subscriptions").delete().eq("id",sub.id);continue;}
+      try{await webpush.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},payload,{TTL:60});sent++;}
+      catch(err){const code=Number((err as {statusCode?:number})?.statusCode||0);if(code===404||code===410)await testAdmin.from("customer_push_subscriptions").delete().eq("id",sub.id);failed++;}
+    }
+    return json({ok:true,sent,failed});
+  }
   const eventId=Number(body.event_id),eventType=String(body.event_type||""),recordId=Number(body.record_id);
   if(!Number.isSafeInteger(eventId)||eventId<=0||!Number.isSafeInteger(recordId)||recordId<=0||!(["topup","kmcard_order","legacy_order"].includes(eventType)))
     return json({error:"invalid_event"},400);
