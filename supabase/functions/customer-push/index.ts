@@ -83,7 +83,8 @@ function makeNotice(eventType: string, row: Record<string,unknown>) {
     const extra=playerName?` اسم اللاعب: ${playerName}.`:"";
     return {title:"طلبك مكتمل ✅",body:`${game} — ${pack}.${extra}`,url:`${SITE}?from_notification=1#track`};
   }
-  return {title:"تعذر إكمال طلب الشحن",body:`لم يكتمل طلب ${game} — ${pack} ❌ وأُعيد المبلغ إلى محفظتك.`,url:`${SITE}?from_notification=1#track`};
+  const extra=playerName?` اسم اللاعب: ${playerName}.`:"";
+  return {title:"تعذر إكمال طلب الشحن",body:`لم يكتمل طلب ${game} — ${pack}.${extra} ❌ وأُعيد المبلغ إلى محفظتك.`,url:`${SITE}?from_notification=1#track`};
 }
 
 Deno.serve(async (req)=>{
