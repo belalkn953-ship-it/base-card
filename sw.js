@@ -1,4 +1,4 @@
-const CACHE_NAME='base-card-offline-v34';
+const CACHE_NAME='base-card-offline-v35';
 const APP_SHELL=[
   './','./index.html','./styles.css?v=50','./app.js?v=166',
   './supabase-config.js','./km-game-catalog.js?v=4','./km-images.js?v=5','./my-payments.js?v=3',
