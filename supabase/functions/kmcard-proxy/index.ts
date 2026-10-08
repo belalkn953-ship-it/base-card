@@ -189,6 +189,85 @@ Deno.serve(async (req)=>{
     providerCatalogCache={at:Date.now(),rows:Array.isArray(data)?data:(data.data||[])};
     return providerCatalogCache.rows;
   };
+  const normalizePriceQty=(value)=>{const n=Number(value);return Number.isFinite(n)&&n>0?String(n):'';};
+  const isGamePriceProduct=(p)=>{
+    const id=Number(p?.id),cat=String(p?.category_name||'').trim();
+    if([4,11].includes(id)||Number(p?.parent_id)===6)return false;
+    if(/^FREE FIRE GLOBAL$/i.test(cat))return APPROVED_FREE_FIRE_IDS.has(id);
+    if(/^PUBG GLOBAL$/i.test(cat))return APPROVED_PUBG_IDS.has(id);
+    return APPROVED_GAME_CATEGORIES.has(cat)&&APPROVED_GAME_IDS.has(id);
+  };
+  const calculateAnchoredTotal=(baseUnit,baselineCost,currentCost,quantity)=>{
+    const base=scaledBigInt(baseUnit,18),oldCost=scaledBigInt(baselineCost,18),newCost=scaledBigInt(currentCost,18),qty=scaledBigInt(quantity,6);
+    const adjusted=base+newCost-oldCost;if(adjusted<=0n||qty<=0n)throw new Error('invalid anchored price');
+    const numerator=adjusted*qty,denominator=CHAT_COST_SCALE*CHAT_QTY_SCALE;
+    return ((numerator+denominator-1n)/denominator).toString();
+  };
+  const calculateGameSale=(baseSale,baselineCost,currentCost,quantity)=>{
+    const base=scaledBigInt(baseSale,18),delta=scaledBigInt(currentCost,18)-scaledBigInt(baselineCost,18),qty=scaledBigInt(quantity,6);
+    const total=base+(delta*qty)/CHAT_QTY_SCALE;if(total<=0n)throw new Error('invalid anchored price');
+    const centScale=10000000000000000n,cents=(total+centScale/2n)/centScale,whole=cents/100n,fraction=cents%100n;
+    return fraction===0n?whole.toString():`${whole}.${fraction.toString().padStart(2,'0')}`;
+  };
+  const readSaleMap=async()=>{
+    const {data,error}=await admin.from('settings').select('value').eq('key','km_sale_prices').maybeSingle();
+    if(error)throw error;try{return typeof data?.value==='string'?JSON.parse(data.value||'{}'):(data?.value||{})}catch(_){throw new Error('تعذر قراءة أسعار البيع')}
+  };
+  const fetchAnchors=async(kind,ids)=>{
+    if(!ids.length)return[];
+    const {data,error}=await admin.from('km_price_anchors').select('product_kind,product_id,sale_quantity,base_sale_price_syp,provider_cost_syp').eq('product_kind',kind).in('product_id',ids);
+    if(error)throw error;return data||[];
+  };
+  const writeAnchorSeeds=async(rows)=>{
+    if(!rows.length)return;
+    const {error}=await admin.from('km_price_anchors').upsert(rows,{onConflict:'product_kind,product_id,sale_quantity',ignoreDuplicates:true});
+    if(error)throw error;
+  };
+  const ensureChatAnchors=async(rows)=>{
+    const products=rows.filter(p=>Number(p?.parent_id)===6&&APPROVED_CHAT_IDS.has(Number(p.id))&&Number(p.price)>0);
+    const ids=[...new Set(products.map(p=>Number(p.id)))];let anchors=await fetchAnchors('chat',ids);
+    const have=new Set(anchors.map(a=>`${Number(a.product_id)}:1`));
+    const seeds=products.filter(p=>!have.has(`${Number(p.id)}:1`)).map(p=>({product_kind:'chat',product_id:Number(p.id),sale_quantity:1,base_sale_price_syp:String(Number(p.price)*1.14),provider_cost_syp:String(p.price)}));
+    await writeAnchorSeeds(seeds);if(seeds.length)anchors=await fetchAnchors('chat',ids);return anchors;
+  };
+  const gameSaleMaps=async(rows)=>{
+    const priceMap=await readSaleMap(),products=rows.filter(p=>isGamePriceProduct(p)&&Number(p.price)>0),byId=new Map(products.map(p=>[Number(p.id),p])),ids=[...byId.keys()];
+    let anchors=await fetchAnchors('game',ids);const anchorKey=a=>`${Number(a.product_id)}:${normalizePriceQty(a.sale_quantity)}`,have=new Set(anchors.map(anchorKey)),seeds=[];
+    for(const [key,value] of Object.entries(priceMap||{})){
+      const [idText,qtyText,...extra]=String(key).split(':');if(extra.length||!/^\d+$/.test(idText))continue;
+      const id=Number(idText),p=byId.get(id),qty=normalizePriceQty(qtyText),base=Number(value);
+      if(!p||!qty||!Number.isFinite(base)||base<=0||!validQuantity(p,qty)||have.has(`${id}:${qty}`))continue;
+      seeds.push({product_kind:'game',product_id:id,sale_quantity:qty,base_sale_price_syp:String(value),provider_cost_syp:String(p.price)});have.add(`${id}:${qty}`);
+    }
+    await writeAnchorSeeds(seeds);if(seeds.length)anchors=await fetchAnchors('game',ids);
+    const anchorMap=new Map(anchors.map(a=>[anchorKey(a),a])),out=new Map();
+    for(const [key,value] of Object.entries(priceMap||{})){
+      const [idText,qtyText,...extra]=String(key).split(':');if(extra.length||!/^\d+$/.test(idText))continue;
+      const id=Number(idText),p=byId.get(id),qty=normalizePriceQty(qtyText),base=Number(value),anchor=anchorMap.get(`${id}:${qty}`);
+      if(!p||!qty||!Number.isFinite(base)||base<=0||!validQuantity(p,qty)||!anchor)continue;
+      try{const sale=calculateGameSale(base,anchor.provider_cost_syp,p.price,qty);const map=out.get(id)||{};map[qty]=Number(sale);out.set(id,map)}catch(_){}
+    }
+    return out;
+  };
+  const quoteChatSale=async(product,quantity)=>{
+    const anchors=await ensureChatAnchors([product]),anchor=anchors.find(a=>Number(a.product_id)===Number(product.id)&&Number(a.sale_quantity)===1);
+    if(!anchor)throw new Error('تعذر تحديد سعر هذه الباقة');
+    return calculateAnchoredTotal(anchor.base_sale_price_syp,anchor.provider_cost_syp,product.price,quantity);
+  };
+  const quoteGameSale=async(product,quantity)=>{
+    if(!isGamePriceProduct(product))return null;
+    const priceMap=await readSaleMap(),qty=normalizePriceQty(quantity),key=`${Number(product.id)}:${qty}`,base=Number(priceMap[key]??(qty==='1'?priceMap[String(Number(product.id))]:undefined));
+    if(!Number.isFinite(base)||base<=0)return null;
+    let anchors=await fetchAnchors('game',[Number(product.id)]),anchor=anchors.find(a=>normalizePriceQty(a.sale_quantity)===qty);
+    if(!anchor){await writeAnchorSeeds([{product_kind:'game',product_id:Number(product.id),sale_quantity:qty,base_sale_price_syp:String(base),provider_cost_syp:String(product.price)}]);anchors=await fetchAnchors('game',[Number(product.id)]);anchor=anchors.find(a=>normalizePriceQty(a.sale_quantity)===qty)}
+    if(!anchor)throw new Error('تعذر تحديد سعر هذه الباقة');
+    return calculateGameSale(base,anchor.provider_cost_syp,product.price,qty);
+  };
+  const requireAdmin=async()=>{
+    const {data:ud,error:ue}=await userClient.auth.getUser();if(ue||!ud.user)return{ok:false,status:401,error:'سجّل الدخول أولًا'};
+    const {data:profile,error}=await admin.from('profiles').select('role').eq('id',ud.user.id).maybeSingle();
+    if(error||profile?.role!=='admin')return{ok:false,status:403,error:'غير مصرح'};return{ok:true,user:ud.user};
+  };
   const finalize = async (row, result, status, forceRefund = false)=>{
     const final = await admin.rpc('finalize_kmcard_order', {
       p_id: Number(row.id),
@@ -201,11 +280,34 @@ Deno.serve(async (req)=>{
     return final.data;
   };
   try {
+    if(action==='admin_chat_price_list'){
+      const gate=await requireAdmin();if(!gate.ok)return json({error:gate.error},gate.status,req);
+      const rows=await getProducts(true),apps=rows.filter(p=>Number(p.parent_id)===6&&APPROVED_CHAT_IDS.has(Number(p.id))&&providerProductAllowed(p));
+      const anchors=await ensureChatAnchors(apps),map=new Map(anchors.map(a=>[Number(a.product_id),a]));
+      return json({products:apps.map(p=>({id:Number(p.id),name:String(p.name||''),available:p.available!==false,base_sale_price_syp:String(map.get(Number(p.id))?.base_sale_price_syp||'')})).sort((a,b)=>a.id-b.id)},200,req);
+    }
+    if(action==='admin_set_chat_price'){
+      const gate=await requireAdmin();if(!gate.ok)return json({error:gate.error},gate.status,req);
+      const productId=Number(body.product_id),sale=Number(body.base_sale_price_syp),rows=await getProducts(true),p=rows.find(x=>Number(x.id)===productId&&Number(x.parent_id)===6&&providerProductAllowed(x));
+      if(!p||!Number(p.price)||!Number.isFinite(sale)||sale<=0||sale>1000000000000)return json({error:'أدخل سعرًا صحيحًا لهذا التطبيق'},400,req);
+      const saved=await admin.rpc('service_set_km_price_anchor',{p_product_kind:'chat',p_product_id:productId,p_quantity:1,p_base_sale_price_syp:sale,p_provider_cost_syp:Number(p.price)});
+      if(saved.error)return json({error:'تعذر حفظ السعر الأساسي'},500,req);
+      return json({ok:true,base_sale_price_syp:String(sale)},200,req);
+    }
+    if(action==='admin_set_game_price'){
+      const gate=await requireAdmin();if(!gate.ok)return json({error:gate.error},gate.status,req);
+      const productId=Number(body.product_id),quantity=normalizeDigits(body.quantity??1),sale=Number(body.base_sale_price_syp),rows=await getProducts(true),p=rows.find(x=>Number(x.id)===productId&&providerProductAllowed(x)&&isGamePriceProduct(x));
+      if(!p||!Number(p.price)||!validQuantity(p,quantity)||!Number.isFinite(sale)||sale<=0||sale>1000000000000)return json({error:'أدخل سعرًا وكمية صحيحين لهذه الباقة'},400,req);
+      const saved=await admin.rpc('service_set_km_price_anchor',{p_product_kind:'game',p_product_id:productId,p_quantity:Number(quantity),p_base_sale_price_syp:sale,p_provider_cost_syp:Number(p.price)});
+      if(saved.error)return json({error:'تعذر حفظ السعر الأساسي'},500,req);
+      return json({ok:true,base_sale_price_syp:String(sale)},200,req);
+    }
     if (action === 'products') {
-      const rows=await getProducts();
+      const rows=await getProducts();await ensureChatAnchors(rows);const dynamicGamePrices=await gameSaleMaps(rows);
       const safeFields=['id','name','available','category_name','parent_id','params','product_type','qty_values'];
       const products=rows.filter(p=>PUBLIC_PRODUCT_IDS.has(Number(p.id))).map((p)=>{
         const safe=Object.fromEntries(safeFields.filter((k)=>p[k]!==undefined).map((k)=>[k,p[k]]));
+        const prices=dynamicGamePrices.get(Number(p.id));if(prices){safe.sale_prices_syp=prices;if(prices['1']!==undefined)safe.sale_price_syp=prices['1'];}
         if(hasForbiddenCredentialParams(p)){safe.available=false;safe.params=[];}
         return safe;
       });
@@ -217,7 +319,7 @@ Deno.serve(async (req)=>{
       if(!p||Number(p.parent_id)!==6||!providerProductAllowed(p))return json({error:'المنتج غير متاح حاليًا'},400,req);
       if(!validQuantity(p,rawQty))return json({error:'الكمية غير صحيحة أو خارج حدود المنتج'},400,req);
       if(!Number(p.price)||Number(p.price)<=0)return json({error:'تعذر تحديد السعر حاليًا'},503,req);
-      return json({sale_price_syp:calculateChatSale(p.price,rawQty),currency:'SYP'},200,req);
+      return json({sale_price_syp:await quoteChatSale(p,rawQty),currency:'SYP'},200,req);
     }
     // Called only by a trusted pg_cron/pg_net job. Never expose this to browser users.
     if (action === 'poll') {
@@ -376,9 +478,14 @@ Deno.serve(async (req)=>{
         return json({ error: 'الكمية غير مدعومة لهذا المنتج' }, 400, req);
       }
       const isChatProduct=Number(p.parent_id)===6;
+      let gameSaleQuote=null;
       if(isChatProduct){
-        const serverQuote=calculateChatSale(p.price,qtyRaw);
+        const serverQuote=await quoteChatSale(p,qtyRaw);
         if(String(body.quoted_sale_price_syp??'')!==serverQuote)return json({error:'تغيّر السعر؛ حدّث السعر قبل الشراء'},409,req);
+      }else if(isGamePriceProduct(p)){
+        gameSaleQuote=await quoteGameSale(p,qtyRaw);
+        if(gameSaleQuote===null)return json({error:'سعر هذه الباقة غير مضبوط حاليًا؛ تواصل مع الدعم'},400,req);
+        if(body.quoted_sale_price_syp!==undefined&&String(body.quoted_sale_price_syp)!==gameSaleQuote)return json({error:'تغيّر السعر؛ حدّث الصفحة قبل الشراء'},409,req);
       }
       const paramsWithPlayer=safeOrderParams(p,params);
       if(paramsWithPlayer===null){
@@ -397,7 +504,7 @@ Deno.serve(async (req)=>{
           })
         : await admin.rpc('create_kmcard_order_internal',{
             p_user_id:ud.user.id,p_product_id:Number(p.id),p_product_name:String(p.name||''),p_category_name:String(p.category_name||''),
-            p_quantity:qty,p_price_usd:Number(p.price),p_params:storedParams,p_order_uuid:body.idempotency_key||null,p_sale_price_syp:null
+            p_quantity:qty,p_price_usd:Number(p.price),p_params:storedParams,p_order_uuid:body.idempotency_key||null,p_sale_price_syp:gameSaleQuote
           });
       if (created.error) {
         await audit({
