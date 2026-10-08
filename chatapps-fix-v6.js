@@ -38,25 +38,24 @@
   function draw(){
     const grid=document.getElementById('chatappsGrid');if(!grid)return;
     if(!search){search=document.createElement('input');search.id='chatFixSearch';search.type='search';search.placeholder='ابحث عن التطبيق بالاسم أو Product ID';search.setAttribute('aria-label','البحث عن التطبيق');search.style.cssText='display:block;width:100%;max-width:520px;margin:0 0 18px;padding:13px 16px;border:1px solid #334155;border-radius:12px;background:#111827;color:#fff;font-size:16px;';grid.parentNode.insertBefore(search,grid);search.addEventListener('input',filter)}
-    const panel=document.getElementById('chatFixPanel'),orderOpen=!!panel&&panel.style.display!=='none';
+    const panel=document.getElementById('chatFixPanel');
     if(!products.length)grid.innerHTML='<div class="panel km-status error">لا توجد تطبيقات متاحة حاليًا.</div>';
     else grid.innerHTML=products.map(p=>{const image=window.KM_CARD_IMAGES?.chatProducts?.[String(Number(p.id))];const visual=image?`<img class="km-card-catalog-image" data-group-src="${esc(image)}" alt="${esc(p.name||'تطبيق')}" width="96" height="96" decoding="async">`:'<span class="km-card-catalog-image-fallback" aria-hidden="true">💬</span>';return `<button type="button" class="game-card chat-fix-card" data-chat-id="${Number(p.id)}" ${p.available===false?'disabled aria-disabled="true"':''}><span class="badge ${p.available===false?'unavailable-badge':''}">${p.available===false?'غير متاح':'متوفر الآن'}</span>${visual}<h3>${esc(p.name||'تطبيق')}</h3><p>Product ID ${Number(p.id)} — باقة مستقلة</p><span class="btn">عرض الباقات ←</span></button>`}).join('');
     document.getElementById('chatappsLoadMore')?.remove();
-    grid.style.display=orderOpen?'none':'';search.style.display=orderOpen?'none':'block';
-    if(!orderOpen)window.loadBaseCardImageGroups?.(grid,12);
+    grid.style.display='';search.style.display='block';
+    window.loadBaseCardImageGroups?.(grid,12);
     grid.querySelectorAll('.chat-fix-card').forEach(b=>b.addEventListener('click',()=>openProduct(byId.get(Number(b.dataset.chatId)))));filter();
   }
   function filter(){const term=(search?.value||'').trim().toLocaleLowerCase();document.querySelectorAll('#chatappsGrid .chat-fix-card').forEach(b=>b.style.display=(!term||b.textContent.toLocaleLowerCase().includes(term))?'':'none')}
   function openProduct(p){
     if(!p)return;
     const section=document.getElementById('chatapps'),grid=document.getElementById('chatappsGrid');let panel=document.getElementById('chatFixPanel');
-    if(!panel){panel=document.createElement('div');panel.id='chatFixPanel';panel.className='panel';panel.style.display='none';const container=section?.querySelector('.container');container?.insertBefore(panel,search||grid)}panel.dataset.chatProductId=String(Number(p.id));
+    if(!panel){panel=document.createElement('div');panel.id='chatFixPanel';panel.className='panel';panel.style.display='none';const container=section?.querySelector('.container');if(grid)grid.insertAdjacentElement('afterend',panel);else container?.appendChild(panel)}panel.dataset.chatProductId=String(Number(p.id));
     const lim=bounds(p), maxAttr=lim.huge?'':` max="${lim.max}"`, range=lim.huge?`الكمية مفتوحة — الحد الأدنى: ${lim.min.toLocaleString('ar-SY')}`:`الكمية المتاحة: ${lim.min.toLocaleString('ar-SY')}${lim.max!==lim.min?' إلى '+lim.max.toLocaleString('ar-SY'):''}`;
     const fields=(Array.isArray(p.params)?p.params:[]).map((k,i)=>`<label class="full">${esc(k)} *<input data-chat-param="${esc(k)}" ${isSensitive(k)?'type="password" autocomplete="new-password"':'type="text" autocomplete="off"'} maxlength="200" required></label>`).join('');
     const select=lim.exact?`<select id="chatFixQty" required>${lim.exact.map(q=>`<option value="${q}">${q.toLocaleString('ar-SY')}</option>`).join('')}</select>`:`<input id="chatFixQty" type="number" min="${lim.min}"${maxAttr} step="1" value="${lim.min}" required>`;
-    panel.innerHTML=`<button type="button" class="btn chat-fix-back" id="chatFixBack">← العودة إلى التطبيقات</button><h3>💬 ${esc(p.name)}</h3><p class="muted">${range}</p><form id="chatFixForm">${fields}<label class="full">الكمية *${select}</label><p id="chatFixQtyError" style="color:#ef4444;font-weight:700;min-height:1.4em"></p><p id="chatFixTotal" class="price-note">جارٍ حساب السعر النهائي…</p><p class="muted">السعر المعروض هو المبلغ النهائي المخصوم من محفظتك.</p><button class="btn" id="chatFixBuy" type="submit" disabled>شراء وشحن</button><p class="muted duplicate-order-warning">لا تضغط على زر الشراء مرتين حتى لا يتم خصم رصيد إضافي من محفظتك.</p><p id="chatFixNote" class="muted" role="status"></p></form>`;
-    panel.style.display='block';if(grid)grid.style.display='none';if(search)search.style.display='none';const moreControl=document.getElementById('chatappsLoadMore');if(moreControl)moreControl.style.display='none';
-    panel.querySelector('#chatFixBack').addEventListener('click',()=>{panel.style.display='none';if(grid)grid.style.display='';if(search)search.style.display='block';const more=document.getElementById('chatappsLoadMore');if(more)more.style.display='block';requestAnimationFrame(()=>{const anchor=search||grid;anchor?.scrollIntoView({behavior:'smooth',block:'start'})})});
+    panel.innerHTML=`<h3>💬 ${esc(p.name)}</h3><p class="muted">${range}</p><form id="chatFixForm">${fields}<label class="full">الكمية *${select}</label><p id="chatFixQtyError" style="color:#ef4444;font-weight:700;min-height:1.4em"></p><p id="chatFixTotal" class="price-note">جارٍ حساب السعر النهائي…</p><p class="muted">السعر المعروض هو المبلغ النهائي المخصوم من محفظتك.</p><button class="btn" id="chatFixBuy" type="submit" disabled>شراء وشحن</button><p class="muted duplicate-order-warning">لا تضغط على زر الشراء مرتين حتى لا يتم خصم رصيد إضافي من محفظتك.</p><p id="chatFixNote" class="muted" role="status"></p></form>`;
+    panel.style.display='block';if(grid)grid.style.display='';if(search)search.style.display='block';
     const form=panel.querySelector('#chatFixForm'),qty=panel.querySelector('#chatFixQty'),total=panel.querySelector('#chatFixTotal'),err=panel.querySelector('#chatFixQtyError'),btn=panel.querySelector('#chatFixBuy'),note=panel.querySelector('#chatFixNote');
     let quoteValue=null,quotedQty='',timer=null,quoteSeq=0;
     const updateQuote=async()=>{
