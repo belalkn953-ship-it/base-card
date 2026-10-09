@@ -6,9 +6,9 @@ const adminAwareFetch=(input,init={})=>{const headers=new Headers(init.headers||
 const sb=createClient(window.SUPABASE_URL,window.SUPABASE_ANON_KEY,{global:{fetch:adminAwareFetch}});const $=s=>document.querySelector(s);const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));let games=[],packs=[],walletRows=[],walletUsdRate=null,exchangeRateValue=null;let walletCurrency='SYP',walletOperation='add';const labels={pending:'قيد الانتظار',processing:'قيد المعالجة',completed:'مكتمل',rejected:'مرفوض'};
 function notice(t,k=''){const e=$('#notice');e.textContent=t;e.className=`alert ${k}`;e.classList.remove('hidden');setTimeout(()=>e.classList.add('hidden'),4000)}
 async function signIn(){const r=await sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.href.split('?')[0]}});if(r.error){const e=$('#loginAlert');e.textContent=r.error.message;e.className='alert error'}}$('#googleAdminLogin').addEventListener('click',signIn);
-function clearAdminPinSession(){adminPinSession='';sessionStorage.removeItem('basecard_admin_pin_session')}
+let adminPinExpiryTimer=0;function clearAdminPinSession(){adminPinSession='';clearTimeout(adminPinExpiryTimer);sessionStorage.removeItem('basecard_admin_pin_session');sessionStorage.removeItem('basecard_admin_pin_expiry')}function scheduleAdminPinExpiry(value){clearTimeout(adminPinExpiryTimer);const until=typeof value==='number'?value:Date.parse(value||'');if(!Number.isFinite(until)||until<=Date.now())return;sessionStorage.setItem('basecard_admin_pin_expiry',String(until));adminPinExpiryTimer=setTimeout(()=>{clearAdminPinSession();location.reload()},Math.max(0,until-Date.now()))}
 async function verifyPinGate(){
-  if(adminPinSession){const check=await sb.rpc('admin_pin_session_valid',{p_session_token:adminPinSession});if(!check.error&&check.data===true)return true;clearAdminPinSession()}
+  if(adminPinSession){const until=Number(sessionStorage.getItem('basecard_admin_pin_expiry')||0);try{const check=await sb.rpc('admin_pin_session_valid',{p_session_token:adminPinSession});if(!check.error&&check.data===true&&Number.isFinite(until)&&until>Date.now()){scheduleAdminPinExpiry(until);return true}}catch(_){}clearAdminPinSession()}
   if(window.__basecardPinGatePromise)return window.__basecardPinGatePromise;
   window.__basecardPinGatePromise=new Promise(resolve=>{
     const o=document.createElement('div');o.id='pinGate';
@@ -16,15 +16,15 @@ async function verifyPinGate(){
     document.body.appendChild(o);const form=o.querySelector('form'),input=o.querySelector('#adminPinInput'),err=o.querySelector('#pinError');
     form.addEventListener('submit',async e=>{e.preventDefault();const pin=input.value.trim();if(!pin){err.textContent='اكتب الرمز السري أولًا';return}err.textContent='جارٍ التحقق…';
       let vr;try{vr=await sb.rpc('verify_admin_pin',{p_pin:pin})}catch(_){err.textContent='تعذر التحقق، حاول مرة أخرى';input.value='';input.focus();return}
-      const result=vr.data?.ok===true&&typeof vr.data?.session_token==='string'&&/^[0-9a-f-]{36}$/.test(vr.data.session_token);
+      const pinExpiresAt=Date.parse(vr.data?.expires_at||'');const result=vr.data?.ok===true&&typeof vr.data?.session_token==='string'&&/^[0-9a-f-]{36}$/.test(vr.data.session_token)&&Number.isFinite(pinExpiresAt)&&pinExpiresAt>Date.now();
       if(vr.error||!result){const left=Number(vr.data?.remaining);err.textContent=vr.data?.reason==='locked'?'تم إيقاف المحاولات مؤقتًا بعد 3 محاولات خاطئة':vr.error?'تعذر التحقق، حاول مرة أخرى':`الرمز السري غير صحيح — المحاولات المتبقية: ${Number.isFinite(left)?left:0}`;input.value='';input.focus();return}
-      adminPinSession=vr.data.session_token;sessionStorage.setItem('basecard_admin_pin_session',adminPinSession);o.remove();resolve(true)
+      adminPinSession=vr.data.session_token;sessionStorage.setItem('basecard_admin_pin_session',adminPinSession);scheduleAdminPinExpiry(pinExpiresAt);o.remove();resolve(true)
     })
   });
   try{return await window.__basecardPinGatePromise}finally{window.__basecardPinGatePromise=null}
 }
 async function boot(){const {data:{user}}=await sb.auth.getUser();if(!user)return;if(!await verifyPinGate())return;const p=await sb.from('profiles').select('name,role').eq('id',user.id).maybeSingle();if(p.data?.role!=='admin'){clearAdminPinSession();const e=$('#loginAlert');e.textContent='هذا الحساب ليس مشرفًا';e.className='alert error';e.classList.remove('hidden');return}$('#adminUser').textContent=p.data.name||user.email;$('#loginView').style.display='none';$('#appView').style.display='block';await refreshAll();const startTab=new URLSearchParams(location.search).get('tab');if(['topups','messages'].includes(startTab))activate(startTab)}
-sb.auth.onAuthStateChange(()=>boot());$('#logout').addEventListener('click',async()=>{await sb.auth.signOut();location.reload()});
+sb.auth.onAuthStateChange(()=>boot());$('#logout').addEventListener('click',async()=>{clearAdminPinSession();await sb.auth.signOut();location.reload()});
 function activate(t){document.querySelectorAll('.admin-menu button').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));document.querySelectorAll('.admin-section').forEach(x=>x.classList.toggle('active',x.id==='tab-'+t));if(t==='overview')refreshAll();if(t==='orders')loadOrders();if(t==='security'){loadAudit();if(!kmAuditTimer)kmAuditTimer=setInterval(()=>{if($('#tab-security')?.classList.contains('active'))loadAudit()},60000)}if(t==='notifications')loadAdminPushStatus();if(t==='topups')loadTopups();if(t==='wallets')loadWallets();if(t==='users')loadUsers();if(t==='games')loadGames();if(t==='packages')loadPackages();if(t==='transfer-prices')loadTransferPrices();if(t==='sections')loadSections();if(t==='settings')loadSettings();if(t==='exchange-rate')loadExchangeRate();if(t==='messages')loadMessages();if(t==='stats')loadStats()}document.addEventListener('click',e=>{const x=e.target.closest('[data-tab]');if(x)activate(x.dataset.tab);const y=e.target.closest('[data-tab-link]');if(y)activate(y.dataset.tabLink)});
 async function refreshAll(){
   const kpis=$('#kpis'),recent=$('#recentOrders');
