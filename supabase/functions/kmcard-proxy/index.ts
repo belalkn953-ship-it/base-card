@@ -9,7 +9,7 @@ const corsFor = (req)=>{
   const origin = req.headers.get("Origin") || "";
   return {
     "Access-Control-Allow-Origin": allowedOrigins.has(origin) ? origin : "https://belalkn953-ship-it.github.io",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-basecard-admin-pin-session, x-cron-secret",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Vary": "Origin"
   };
@@ -266,7 +266,11 @@ Deno.serve(async (req)=>{
   const requireAdmin=async()=>{
     const {data:ud,error:ue}=await userClient.auth.getUser();if(ue||!ud.user)return{ok:false,status:401,error:'سجّل الدخول أولًا'};
     const {data:profile,error}=await admin.from('profiles').select('role').eq('id',ud.user.id).maybeSingle();
-    if(error||profile?.role!=='admin')return{ok:false,status:403,error:'غير مصرح'};return{ok:true,user:ud.user};
+    if(error||profile?.role!=='admin')return{ok:false,status:403,error:'غير مصرح'};
+    const pinToken=req.headers.get('x-basecard-admin-pin-session')||'';
+    const {data:pinValid,error:pinError}=await userClient.rpc('admin_pin_session_valid',{p_session_token:pinToken});
+    if(pinError||pinValid!==true)return{ok:false,status:403,error:'أعد إدخال الرمز السري للمتابعة'};
+    return{ok:true,user:ud.user};
   };
   const finalize = async (row, result, status, forceRefund = false)=>{
     const final = await admin.rpc('finalize_kmcard_order', {
