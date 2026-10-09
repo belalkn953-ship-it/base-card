@@ -37,10 +37,10 @@
   }
   function draw(){
     const grid=document.getElementById('chatappsGrid');if(!grid)return;
-    if(!search){search=document.createElement('input');search.id='chatFixSearch';search.type='search';search.placeholder='ابحث عن التطبيق بالاسم أو Product ID';search.setAttribute('aria-label','البحث عن التطبيق');search.style.cssText='display:block;width:100%;max-width:520px;margin:0 0 18px;padding:13px 16px;border:1px solid #334155;border-radius:12px;background:#111827;color:#fff;font-size:16px;';grid.parentNode.insertBefore(search,grid);search.addEventListener('input',filter)}
+    if(!search){search=document.createElement('input');search.id='chatFixSearch';search.type='search';search.placeholder='ابحث عن التطبيق بالاسم';search.setAttribute('aria-label','البحث عن التطبيق');search.style.cssText='display:block;width:100%;max-width:520px;margin:0 0 18px;padding:13px 16px;border:1px solid #334155;border-radius:12px;background:#111827;color:#fff;font-size:16px;';grid.parentNode.insertBefore(search,grid);search.addEventListener('input',filter)}
     const panel=document.getElementById('chatFixPanel');
     if(!products.length)grid.innerHTML='<div class="panel km-status error">لا توجد تطبيقات متاحة حاليًا.</div>';
-    else grid.innerHTML=products.map(p=>{const image=window.KM_CARD_IMAGES?.chatProducts?.[String(Number(p.id))];const visual=image?`<img class="km-card-catalog-image" data-group-src="${esc(image)}" alt="${esc(p.name||'تطبيق')}" width="96" height="96" decoding="async">`:'<span class="km-card-catalog-image-fallback" aria-hidden="true">💬</span>';return `<button type="button" class="game-card chat-fix-card" data-chat-id="${Number(p.id)}" ${p.available===false?'disabled aria-disabled="true"':''}><span class="badge ${p.available===false?'unavailable-badge':''}">${p.available===false?'غير متاح':'متوفر الآن'}</span>${visual}<h3>${esc(p.name||'تطبيق')}</h3><p>Product ID ${Number(p.id)} — باقة مستقلة</p><span class="btn">عرض الباقات ←</span></button>`}).join('');
+    else grid.innerHTML=products.map(p=>{const image=window.KM_CARD_IMAGES?.chatProducts?.[String(Number(p.id))];const visual=image?`<img class="km-card-catalog-image" data-group-src="${esc(image)}" alt="${esc(p.name||'تطبيق')}" width="96" height="96" decoding="async">`:'<span class="km-card-catalog-image-fallback" aria-hidden="true">💬</span>';return `<button type="button" class="game-card chat-fix-card" data-chat-id="${Number(p.id)}"><span class="badge">متوفر الآن</span>${visual}<h3>${esc(p.name||'تطبيق')}</h3><p>الباقات المتاحة لهذا التطبيق</p><span class="btn">عرض الباقات ←</span></button>`}).join('');
     document.getElementById('chatappsLoadMore')?.remove();
     grid.style.display='';search.style.display='block';
     window.loadBaseCardImageGroups?.(grid,12);
@@ -95,12 +95,15 @@
     productsRefreshing=true;
     try{
       const received=window.getBaseCardProducts?await window.getBaseCardProducts(productsLoaded):((await api({action:'products'})).products||[]);
-      const incoming=received.filter(p=>Number(p.parent_id)===6&&APPROVED_CHAT_IDS.has(Number(p.id))&&p.id!=null).sort((a,b)=>Number(a.id)-Number(b.id));
+      const incoming=received.filter(p=>p&&p.id!=null&&Number(p.parent_id)===6&&APPROVED_CHAT_IDS.has(Number(p.id))&&p.available!==false).sort((a,b)=>Number(a.id)-Number(b.id));
       if(!productsLoaded){products=incoming;productsLoaded=true;byId=new Map(products.map(p=>[Number(p.id),p]));draw()}
       else{
-        const latest=new Map(incoming.map(p=>[Number(p.id),p]));let changed=false;
-        products.forEach(p=>{const live=latest.get(Number(p.id));if(!live||typeof live.available!=='boolean'||p.available===live.available)return;p.available=live.available;changed=true});
-        if(changed){byId=new Map(products.map(p=>[Number(p.id),p]));draw();const panel=document.getElementById('chatFixPanel'),active=byId.get(Number(panel?.dataset.chatProductId));if(active)panel.updateChatAvailability?.(active.id,active.available)}
+        const signature=rows=>JSON.stringify(rows.map(p=>[Number(p.id),String(p.name||''),p.available,JSON.stringify(p.qty_values||null),JSON.stringify(p.params||[])]));
+        if(signature(products)!==signature(incoming)){
+          const panel=document.getElementById('chatFixPanel'),activeId=Number(panel?.dataset.chatProductId);
+          products=incoming;byId=new Map(products.map(p=>[Number(p.id),p]));draw();
+          const active=byId.get(activeId);if(active)panel?.updateChatAvailability?.(active.id,active.available);else if(panel)panel.style.display='none';
+        }
       }
     }catch(_){if(!productsLoaded)grid.innerHTML='<div class="panel km-status error">تعذر تحميل التطبيقات الآن. حاول تحديث الصفحة.</div>'}
     finally{productsRefreshing=false}
