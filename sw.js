@@ -1,8 +1,8 @@
-const CACHE_NAME='base-card-offline-v35';
+const CACHE_NAME='base-card-offline-v36';
 const APP_SHELL=[
-  './','./index.html','./styles.css?v=50','./app.js?v=166',
+  './','./index.html','./styles.css?v=50','./app.js?v=169',
   './supabase-config.js','./km-game-catalog.js?v=4','./km-images.js?v=5','./my-payments.js?v=3',
-  './account-security.js?v=6','./chatapps-fix-v6.js?v=28','./kmcard-ui.js?v=45',
+  './account-security.js?v=6','./chatapps-fix-v6.js?v=29','./kmcard-ui.js?v=45',
   './transfer-fallback.js?v=9','./manifest.webmanifest?v=2','./icon-192.png?v=2','./icon-512.png?v=2','./icon-192-maskable.png?v=2','./icon-512-maskable.png?v=2'
 ];
 const INDEX_URL=new URL('./index.html',self.registration.scope).href;
