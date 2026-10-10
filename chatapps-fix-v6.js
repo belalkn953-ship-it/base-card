@@ -3,8 +3,13 @@
   const endpoint=window.SUPABASE_URL+'/functions/v1/kmcard-proxy';
   const anon=window.SUPABASE_ANON_KEY;
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const isSensitive=k=>/(password|passcode|كلمة\s*المرور|رمز\s*سري)/i.test(String(k));
-  const APPROVED_CHAT_IDS=new Set([6,12,17,22,30,33,35,38,40,42,43,44,45,46,47,49,52,54,56,57,58,59,60,61,62,63,65,66,67,68,69,70,71,72,73,74,76,77,78,79,80,81,82,83,84,85,86,87,88,89,91,92,93,94,96,97,100,101,102,104,107,108,109,110,111,112,266,267,268,275,281,282,283,284,286,287,289,290,291,292,293,294,295,296,297,298,299,300,301,302,304,305,306,307,309,323,754,755,757,789,792,793,794,796,798,799,800,801,817,863,864,865,869,879,881,883,884,885,886,887,890,891,892,893,894,895,896,897,898,900,901,902,904,955,958,981,1010,1017,1037,1043,1048,1071,1085,1086,1087,1088,1089,1093,1094,1103,1105,1113]);
+  const isSensitive=k=>/(password|passcode|secret|token|verification|authentication|auth|security|login|sms|\botp\b|\b2fa\b|كلمة\s*المرور|رمز\s*(?:الدخول|سري|التحقق|المصادقة)|التحقق\s*الثنائي)/i.test(String(k));
+  const normalizeSearchText=value=>String(value??'').normalize('NFKC').toLowerCase().replace(/[\u064b-\u065f\u0670\u06d6-\u06ed]/g,'').replace(/\u0640/g,'').replace(/[أإآٱ]/g,'ا').replace(/[ىی]/g,'ي').replace(/ة/g,'ه').replace(/[٠-٩]/g,d=>String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))).replace(/[۰-۹]/g,d=>String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).replace(/[^a-z0-9\u0600-\u06ff]+/g,' ').trim().replace(/\s+/g,' ');
+  function phoneticSearchKey(value){let s=String(value??'').normalize('NFKC').toLowerCase().replace(/[\u064b-\u065f\u0670\u06d6-\u06ed]/g,'').replace(/\u0640/g,'').replace(/wh/g,'w').replace(/ph/g,'f').replace(/sh|ch|kh/g,'x').replace(/gh/g,'g').replace(/th/g,'t').replace(/[أإآٱا]/g,'a').replace(/ة/g,'a').replace(/[ىیي]/g,'y').replace(/و/g,'w').replace(/ء|ع/g,'').replace(/[بپ]/g,'b').replace(/[تثط]/g,'t').replace(/[دذض]/g,'d').replace(/[سص]/g,'s').replace(/[زظ]/g,'z').replace(/[حهه]/g,'h').replace(/[خش]/g,'x').replace(/غ/g,'g').replace(/[قك]/g,'k').replace(/[فڤ]/g,'f').replace(/ج/g,'j').replace(/ر/g,'r').replace(/ل/g,'l').replace(/م/g,'m').replace(/ن/g,'n').replace(/[^a-z0-9]/g,'').replace(/[gj]/g,'j').replace(/[ckq]/g,'k').replace(/[fv]/g,'f').replace(/[pb]/g,'b').replace(/[aeiouwy]/g,'').replace(/(.)\1+/g,'$1');return s;}
+  const SEARCH_ALIAS_GROUPS=[['whatsapp','واتساب','واتس اب','واتسآب'],['telegram','تلغرام','تليغرام','تيليجرام'],['tiktok','تيك توك','تيكتوك'],['bigo','bigo live','بيجو','بيغو','بيجو لايف','بيغو لايف'],['tango','تانجو'],['imo','ايمو','إيمو'],['viber','فايبر'],['likee','لايكي'],['yalla','يلا']];
+  function searchAliases(value){const compact=normalizeSearchText(value).replace(/\s/g,'');const out=[];for(const group of SEARCH_ALIAS_GROUPS){const keys=group.map(x=>normalizeSearchText(x).replace(/\s/g,''));if(keys.some(k=>compact.includes(k)))out.push(...group)}return out;}
+  function searchForms(value){const raw=String(value??''),norm=normalizeSearchText(raw),forms=[norm,norm.replace(/\s/g,''),phoneticSearchKey(raw)];for(const alias of searchAliases(raw)){const n=normalizeSearchText(alias);forms.push(n,n.replace(/\s/g,''),phoneticSearchKey(alias));}return [...new Set(forms.filter(Boolean))];}
+  function chatSearchBlob(p){return searchForms([p?.name||'',p?.category_name||'',...searchAliases(p?.name||'')].join(' ')).join(' ');}
   let products=[], byId=new Map(), search, productsLoaded=false, productsRefreshing=false, statusTimerStarted=false;
 
   async function api(body){
@@ -40,13 +45,13 @@
     if(!search){search=document.createElement('input');search.id='chatFixSearch';search.type='search';search.placeholder='ابحث عن التطبيق بالاسم';search.setAttribute('aria-label','البحث عن التطبيق');search.style.cssText='display:block;width:100%;max-width:520px;margin:0 0 18px;padding:13px 16px;border:1px solid #334155;border-radius:12px;background:#111827;color:#fff;font-size:16px;';grid.parentNode.insertBefore(search,grid);search.addEventListener('input',filter)}
     const panel=document.getElementById('chatFixPanel');
     if(!products.length)grid.innerHTML='<div class="panel km-status error">لا توجد تطبيقات متاحة حاليًا.</div>';
-    else grid.innerHTML=products.map(p=>{const image=window.KM_CARD_IMAGES?.chatProducts?.[String(Number(p.id))];const visual=image?`<img class="km-card-catalog-image" data-group-src="${esc(image)}" alt="${esc(p.name||'تطبيق')}" width="96" height="96" decoding="async">`:'<span class="km-card-catalog-image-fallback" aria-hidden="true">💬</span>';return `<button type="button" class="game-card chat-fix-card" data-chat-id="${Number(p.id)}"><span class="badge">متوفر الآن</span>${visual}<h3>${esc(p.name||'تطبيق')}</h3><p>الباقات المتاحة لهذا التطبيق</p><span class="btn">عرض الباقات ←</span></button>`}).join('');
+    else grid.innerHTML=products.map(p=>{const image=window.KM_CARD_IMAGES?.chatProducts?.[String(Number(p.id))];const visual=image?`<img class="km-card-catalog-image" data-group-src="${esc(image)}" alt="${esc(p.name||'تطبيق')}" width="96" height="96" decoding="async">`:'<span class="km-card-catalog-image-fallback" aria-hidden="true">💬</span>';const searchData=esc(chatSearchBlob(p));return `<button type="button" class="game-card chat-fix-card" data-chat-id="${Number(p.id)}" data-chat-search="${searchData}"><span class="badge">متوفر الآن</span>${visual}<h3>${esc(p.name||'تطبيق')}</h3><p>الباقات المتاحة لهذا التطبيق</p><span class="btn">عرض الباقات ←</span></button>`}).join('');
     document.getElementById('chatappsLoadMore')?.remove();
     grid.style.display='';search.style.display='block';
     window.loadBaseCardImageGroups?.(grid,12);
     grid.querySelectorAll('.chat-fix-card').forEach(b=>b.addEventListener('click',()=>openProduct(byId.get(Number(b.dataset.chatId)))));filter();
   }
-  function filter(){const term=(search?.value||'').trim().toLocaleLowerCase();document.querySelectorAll('#chatappsGrid .chat-fix-card').forEach(b=>b.style.display=(!term||b.textContent.toLocaleLowerCase().includes(term))?'':'none')}
+  function filter(){const raw=(search?.value||'').trim(),term=normalizeSearchText(raw),keys=searchForms(raw);document.querySelectorAll('#chatappsGrid .chat-fix-card').forEach(b=>{const blob=b.dataset.chatSearch||searchForms(b.textContent).join(' ');b.style.display=(!term||keys.some(k=>k.length>0&&blob.includes(k)))?'':'none'})}
   function openProduct(p){
     if(!p)return;
     const section=document.getElementById('chatapps'),grid=document.getElementById('chatappsGrid');let panel=document.getElementById('chatFixPanel');
@@ -95,7 +100,7 @@
     productsRefreshing=true;
     try{
       const received=window.getBaseCardProducts?await window.getBaseCardProducts(productsLoaded):((await api({action:'products'})).products||[]);
-      const incoming=received.filter(p=>p&&p.id!=null&&Number(p.parent_id)===6&&APPROVED_CHAT_IDS.has(Number(p.id))&&p.available!==false).sort((a,b)=>Number(a.id)-Number(b.id));
+      const incoming=received.filter(p=>p&&Number.isSafeInteger(Number(p.id))&&Number(p.id)>0&&Number(p.parent_id)===6&&p.available!==false&&!(Array.isArray(p.params)&&p.params.some(isSensitive))).sort((a,b)=>Number(a.id)-Number(b.id));
       if(!productsLoaded){products=incoming;productsLoaded=true;byId=new Map(products.map(p=>[Number(p.id),p]));draw()}
       else{
         const signature=rows=>JSON.stringify(rows.map(p=>[Number(p.id),String(p.name||''),p.available,JSON.stringify(p.qty_values||null),JSON.stringify(p.params||[])]));
