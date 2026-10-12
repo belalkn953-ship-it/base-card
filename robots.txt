@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://belalkn953-ship-it.github.io/base-card/sitemap.xml
