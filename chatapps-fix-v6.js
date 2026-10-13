@@ -11,6 +11,8 @@
   function searchForms(value){const raw=String(value??''),norm=normalizeSearchText(raw),forms=[norm,norm.replace(/\s/g,''),phoneticSearchKey(raw)];for(const alias of searchAliases(raw)){const n=normalizeSearchText(alias);forms.push(n,n.replace(/\s/g,''),phoneticSearchKey(alias));}return [...new Set(forms.filter(Boolean))];}
   function chatSearchBlob(p){return searchForms([p?.name||'',p?.category_name||'',...searchAliases(p?.name||'')].join(' ')).join(' ');}
   let products=[], byId=new Map(), search, productsLoaded=false, productsRefreshing=false, statusTimerStarted=false;
+  const quoteCache=new Map();
+  window.addEventListener('base-usd-rate-updated',()=>document.getElementById('chatFixPanel')?.refreshUsd?.());
 
   async function api(body){
     const r=await fetch(endpoint,{method:'POST',headers:{apikey:anon,Authorization:'Bearer '+anon,'Content-Type':'application/json'},body:JSON.stringify(body)});
@@ -32,6 +34,15 @@
   function formatMoney(value){
     try{return BigInt(String(value)).toLocaleString('ar-SY')}catch(_){return String(value)}
   }
+  function quoteKey(p,qty){return `${Number(p?.id)}:${String(numText(qty))}`}
+  function localSalePrice(p,qty){
+    const q=String(numText(qty)),nq=Number(q);let productValue=p?.sale_prices_syp?.[q]??(nq===1?p?.sale_price_syp:undefined);
+    if(productValue!==undefined&&productValue!==null&&productValue!==''){const n=Number(productValue);if(Number.isFinite(n)&&n>0)return n}
+    let map={};try{const raw=window.__baseSettings?.km_sale_prices;map=typeof raw==='string'?JSON.parse(raw||'{}'):(raw||{})}catch(_){}
+    for(const key of [`${Number(p?.id)}:${q}`,`${Number(p?.id)}_${q}`,`${Number(p?.id)}-${q}`,...(nq===1?[String(Number(p?.id))]:[])]){const n=Number(map[key]);if(Number.isFinite(n)&&n>0)return n}
+    return null;
+  }
+  function fastPreviewPrice(p,qty){const cached=quoteCache.get(quoteKey(p,qty));if(cached&&Date.now()-cached.at<15000)return cached.price;return localSalePrice(p,qty)}
   function friendly(err){
     const m=String(err?.message||err||'');
     if(/provider|مزود|رصيد.*مزود|تواصل مع الدعم/i.test(m))return 'لا يوجد رصيد كافٍ لدى مزود الشحن حاليًا، تواصل مع الدعم';
@@ -62,16 +73,18 @@
     panel.innerHTML=`<h3>💬 ${esc(p.name)}</h3><p class="muted">${range}</p><form id="chatFixForm">${fields}<label class="full">الكمية *${select}</label><p id="chatFixQtyError" style="color:#ef4444;font-weight:700;min-height:1.4em"></p><p id="chatFixTotal" class="price-note">جارٍ حساب السعر النهائي…</p><p class="muted">السعر المعروض هو المبلغ النهائي المخصوم من محفظتك.</p><button class="btn" id="chatFixBuy" type="submit" disabled>شراء وشحن</button><p class="muted duplicate-order-warning">لا تضغط على زر الشراء مرتين حتى لا يتم خصم رصيد إضافي من محفظتك.</p><p id="chatFixNote" class="muted" role="status"></p></form>`;
     panel.style.display='block';if(grid)grid.style.display='';if(search)search.style.display='block';
     const form=panel.querySelector('#chatFixForm'),qty=panel.querySelector('#chatFixQty'),total=panel.querySelector('#chatFixTotal'),err=panel.querySelector('#chatFixQtyError'),btn=panel.querySelector('#chatFixBuy'),note=panel.querySelector('#chatFixNote');
-    let quoteValue=null,quotedQty='',timer=null,quoteSeq=0;
+    let quoteValue=null,quotedQty='',timer=null,quoteSeq=0,shownSaleSyp=null,pricePending=false;
+    const renderSalePrice=(value,pending=false)=>{shownSaleSyp=String(value);pricePending=pending;const usd=window.baseCardUsdEquivalentFromSyp?.(value);total.innerHTML=`السعر النهائي: <b>${formatMoney(value)} ل.س جديدة</b><br><span class="package-usd">${usd?`≈ ${esc(usd)}`:'يظهر السعر بالدولار بعد تحميل سعر الصرف.'}</span>${pending?'<br><small>جارٍ تأكيد السعر…</small>':''}`};
+    panel.refreshUsd=()=>{if(shownSaleSyp!==null)renderSalePrice(shownSaleSyp,pricePending)};
     const updateQuote=async()=>{
       const raw=numText(qty.value),number=Number(raw),seq=++quoteSeq;quoteValue=null;quotedQty='';btn.disabled=true;
-      const belowMin=Number.isFinite(number)&&number<lim.min,aboveMax=Number.isFinite(number)&&Number.isFinite(lim.max)&&number>lim.max;if(!Number.isFinite(number)||belowMin||aboveMax||(lim.exact&&!lim.exact.includes(number))){err.textContent=belowMin?`أقل كمية مسموحة هي ${lim.min.toLocaleString('ar-SY')}.`:aboveMax?`أقصى كمية مسموحة هي ${lim.max.toLocaleString('ar-SY')}.`:`الكمية غير صحيحة؛ ${range}.`;total.textContent='';return}
-      err.textContent='';total.textContent='جارٍ حساب السعر النهائي…';
-      try{const q=await api({action:'quote',product_id:Number(p.id),qty:raw});if(seq!==quoteSeq)return;quoteValue=String(q.sale_price_syp);quotedQty=raw;total.innerHTML=`السعر النهائي: <b>${formatMoney(quoteValue)} ل.س جديدة</b>`;btn.disabled=!!form.dataset.submitting}
-      catch(e){if(seq!==quoteSeq)return;total.textContent='تعذر حساب السعر الآن. حاول مجددًا.';err.textContent=friendly(e);btn.disabled=true}
+      const belowMin=Number.isFinite(number)&&number<lim.min,aboveMax=Number.isFinite(number)&&Number.isFinite(lim.max)&&number>lim.max;if(!Number.isFinite(number)||belowMin||aboveMax||(lim.exact&&!lim.exact.includes(number))){err.textContent=belowMin?`أقل كمية مسموحة هي ${lim.min.toLocaleString('ar-SY')}.`:aboveMax?`أقصى كمية مسموحة هي ${lim.max.toLocaleString('ar-SY')}.`:`الكمية غير صحيحة؛ ${range}.`;total.textContent='';shownSaleSyp=null;pricePending=false;return}
+      err.textContent='';const preview=fastPreviewPrice(p,raw);if(preview!==null)renderSalePrice(preview,true);else{shownSaleSyp=null;pricePending=true;total.textContent='جارٍ حساب السعر النهائي…'}
+      try{const q=await api({action:'quote',product_id:Number(p.id),qty:raw});if(seq!==quoteSeq)return;quoteValue=String(q.sale_price_syp);quotedQty=raw;quoteCache.set(quoteKey(p,raw),{price:quoteValue,at:Date.now()});renderSalePrice(quoteValue,false);btn.disabled=!!form.dataset.submitting}
+      catch(e){if(seq!==quoteSeq)return;shownSaleSyp=null;pricePending=false;total.textContent='تعذر حساب السعر الآن. حاول مجددًا.';err.textContent=friendly(e);btn.disabled=true}
     };
-    const scheduleQuote=()=>{clearTimeout(timer);quoteValue=null;quotedQty='';btn.disabled=true;delete form.dataset.orderUuid;timer=setTimeout(updateQuote,250)};
-    panel.updateChatAvailability=(id,available)=>{if(Number(id)!==Number(p.id))return;if(available===false){clearTimeout(timer);quoteSeq++;quoteValue=null;quotedQty='';btn.disabled=true;total.textContent='غير متاح';err.textContent='';note.textContent='غير متاح'}else{note.textContent='';scheduleQuote()}};
+    const scheduleQuote=()=>{clearTimeout(timer);quoteValue=null;quotedQty='';btn.disabled=true;delete form.dataset.orderUuid;const raw=numText(qty.value),number=Number(raw),valid=Number.isFinite(number)&&number>=lim.min&&(!Number.isFinite(lim.max)||number<=lim.max)&&(!lim.exact||lim.exact.includes(number));if(valid){const preview=fastPreviewPrice(p,raw);if(preview!==null)renderSalePrice(preview,true);else{shownSaleSyp=null;pricePending=true;total.textContent='جارٍ حساب السعر النهائي…'}}else{shownSaleSyp=null;pricePending=false;total.textContent=''}timer=setTimeout(updateQuote,70)};
+    panel.updateChatAvailability=(id,available)=>{if(Number(id)!==Number(p.id))return;if(available===false){clearTimeout(timer);quoteSeq++;quoteValue=null;quotedQty='';shownSaleSyp=null;pricePending=false;btn.disabled=true;total.textContent='غير متاح';err.textContent='';note.textContent='غير متاح'}else{note.textContent='';scheduleQuote()}};
     qty.addEventListener('input',scheduleQuote);qty.addEventListener('change',scheduleQuote);
     form.addEventListener('input',e=>{if(e.target!==qty&& !form.dataset.submitting)delete form.dataset.orderUuid});
     updateQuote();
