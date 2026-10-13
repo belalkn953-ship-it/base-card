@@ -249,6 +249,32 @@ Deno.serve(async (req)=>{
     }
     return out;
   };
+  // Sync only denominations already configured in km_sale_prices; supplier costs
+  // stay in the service-only anchor table and never enter the public response.
+  const transferSaleMaps=async(rows)=>{
+    const savedMap=await readSaleMap();
+    const byId=new Map((rows||[]).filter(p=>[4,11].includes(Number(p.id))&&providerProductAllowed(p)&&p.available!==false&&Number(p.price)>0).map(p=>[Number(p.id),p]));
+    const items=[];
+    for(const [key,value] of Object.entries(savedMap||{})){
+      const parts=String(key).split(':');if(parts.length!==2||!/^\d+$/.test(parts[0]))continue;
+      const id=Number(parts[0]),product=byId.get(id),quantity=normalizePriceQty(parts[1]);
+      if(!product||!quantity||!Number.isFinite(Number(value))||Number(value)<=0||!validQuantity(product,quantity))continue;
+      items.push({product_id:id,quantity,provider_cost_syp:String(product.price)});
+    }
+    if(items.length){
+      const {error}=await admin.rpc('service_sync_km_transfer_prices',{p_items:items});
+      if(error)throw new Error('تعذر تحديث أسعار التحويل؛ لم يتم تغيير أي طلب');
+    }
+    const currentMap=await readSaleMap(),out=new Map();
+    for(const [key,value] of Object.entries(currentMap||{})){
+      const parts=String(key).split(':');if(parts.length!==2||!/^\d+$/.test(parts[0]))continue;
+      const id=Number(parts[0]),quantity=normalizePriceQty(parts[1]);
+      if(![4,11].includes(id)||!quantity||!Number.isFinite(Number(value))||Number(value)<=0)continue;
+      const product=byId.get(id);if(!product||!validQuantity(product,quantity))continue;
+      const prices=out.get(id)||{};prices[quantity]=Number(value);out.set(id,prices);
+    }
+    return out;
+  };
   const quoteChatSale=async(product,quantity)=>{
     const anchors=await ensureChatAnchors([product]),anchor=anchors.find(a=>Number(a.product_id)===Number(product.id)&&Number(a.sale_quantity)===1);
     if(!anchor)throw new Error('تعذر تحديد سعر هذه الباقة');
@@ -284,6 +310,29 @@ Deno.serve(async (req)=>{
     return final.data;
   };
   try {
+    if(action==='admin_transfer_price_list'){
+      const gate=await requireAdmin();if(!gate.ok)return json({error:gate.error},gate.status,req);
+      const rows=await getProducts(true),maps=await transferSaleMaps(rows);
+      const products=[];
+      for(const id of [4,11]){
+        const product=rows.find(p=>Number(p.id)===id);
+        for(const [quantity,value] of (maps.get(id)||new Map()).entries()){
+          products.push({id,name:String(product?.name||product?.category_name||''),available:product?.available!==false,quantity,base_sale_price_syp:String(value)});
+        }
+      }
+      return json({products:products.sort((a,b)=>a.id-b.id||Number(a.quantity)-Number(b.quantity))},200,req);
+    }
+    if(action==='admin_set_transfer_price'){
+      const gate=await requireAdmin();if(!gate.ok)return json({error:gate.error},gate.status,req);
+      const productId=Number(body.product_id),quantity=normalizeDigits(body.quantity),sale=Number(body.base_sale_price_syp);
+      const rows=await getProducts(true),p=rows.find(x=>Number(x.id)===productId&&providerProductAllowed(x)&&x.available!==false);
+      const existingMap=await readSaleMap(),saleKey=`${productId}:${normalizePriceQty(quantity)}`;
+      if(![4,11].includes(productId)||!p||!Number(p.price)||!validQuantity(p,quantity)||!Object.prototype.hasOwnProperty.call(existingMap,saleKey)||!Number.isFinite(sale)||sale<=0||sale>1000000000000)
+        return json({error:'أدخل سعرًا صحيحًا لكمية تحويل موجودة'},400,req);
+      const saved=await admin.rpc('service_set_km_price_anchor',{p_product_kind:'transfer',p_product_id:productId,p_quantity:Number(quantity),p_base_sale_price_syp:sale,p_provider_cost_syp:Number(p.price)});
+      if(saved.error)return json({error:'تعذر حفظ سعر التحويل الأساسي'},500,req);
+      return json({ok:true,base_sale_price_syp:String(sale)},200,req);
+    }
     if(action==='admin_chat_price_list'){
       const gate=await requireAdmin();if(!gate.ok)return json({error:gate.error},gate.status,req);
       const rows=await getProducts(true),apps=rows.filter(p=>isChatCatalogProduct(p)&&providerProductAllowed(p));
@@ -307,11 +356,13 @@ Deno.serve(async (req)=>{
       return json({ok:true,base_sale_price_syp:String(sale)},200,req);
     }
     if (action === 'products') {
-      const rows=await getProducts();await ensureChatAnchors(rows);const dynamicGamePrices=await gameSaleMaps(rows);
+      const rows=await getProducts(true);await ensureChatAnchors(rows);const dynamicGamePrices=await gameSaleMaps(rows),dynamicTransferPrices=await transferSaleMaps(rows);
       const safeFields=['id','name','available','category_name','parent_id','params','product_type','qty_values'];
       const products=rows.filter(p=>PUBLIC_PRODUCT_IDS.has(Number(p.id))||isChatCatalogProduct(p)).map((p)=>{
         const safe=Object.fromEntries(safeFields.filter((k)=>p[k]!==undefined).map((k)=>[k,p[k]]));
-        const prices=dynamicGamePrices.get(Number(p.id));if(prices){safe.sale_prices_syp=prices;if(prices['1']!==undefined)safe.sale_price_syp=prices['1'];}
+        const id=Number(p.id),prices=dynamicGamePrices.get(id),transferPrices=dynamicTransferPrices.get(id);
+        if(prices){safe.sale_prices_syp=prices;if(prices['1']!==undefined)safe.sale_price_syp=prices['1'];}
+        if(transferPrices){safe.sale_prices_syp=transferPrices;}
         if(hasForbiddenCredentialParams(p)){safe.available=false;safe.params=[];}
         return safe;
       });
@@ -482,8 +533,15 @@ Deno.serve(async (req)=>{
         return json({ error: 'الكمية غير مدعومة لهذا المنتج' }, 400, req);
       }
       const isChatProduct=Number(p.parent_id)===6;
-      let gameSaleQuote=null;
-      if(isChatProduct){
+      const isTransferProduct=[4,11].includes(Number(p.id));
+      let gameSaleQuote=null,transferSaleQuote=null;
+      if(isTransferProduct){
+        const transferPrices=await transferSaleMaps(products);
+        const current=transferPrices.get(Number(p.id))?.[normalizePriceQty(qtyRaw)];
+        if(!Number.isFinite(Number(current))||Number(current)<=0)return json({error:'سعر هذه الباقة غير مضبوط حاليًا؛ تواصل مع الدعم'},400,req);
+        transferSaleQuote=String(Number(current));
+        if(String(body.quoted_sale_price_syp??'')!==transferSaleQuote)return json({error:'تغيّر السعر؛ حدّث السعر قبل الشراء'},409,req);
+      }else if(isChatProduct){
         const serverQuote=await quoteChatSale(p,qtyRaw);
         if(String(body.quoted_sale_price_syp??'')!==serverQuote)return json({error:'تغيّر السعر؛ حدّث السعر قبل الشراء'},409,req);
       }else if(isGamePriceProduct(p)){
@@ -508,7 +566,7 @@ Deno.serve(async (req)=>{
           })
         : await admin.rpc('create_kmcard_order_internal',{
             p_user_id:ud.user.id,p_product_id:Number(p.id),p_product_name:String(p.name||''),p_category_name:String(p.category_name||''),
-            p_quantity:qty,p_price_usd:Number(p.price),p_params:storedParams,p_order_uuid:body.idempotency_key||null,p_sale_price_syp:gameSaleQuote
+            p_quantity:qty,p_price_usd:Number(p.price),p_params:storedParams,p_order_uuid:body.idempotency_key||null,p_sale_price_syp:isTransferProduct?transferSaleQuote:gameSaleQuote
           });
       if (created.error) {
         await audit({

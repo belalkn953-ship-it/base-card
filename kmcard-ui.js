@@ -21,10 +21,10 @@ function ensureSections(){
 }
 function group(list){const m=new Map();list.forEach(p=>{const n=String(p.category_name||p.parent_name||p.category?.name||p.parent?.name||p.name||'خدمات الشحن').trim();if(!m.has(n))m.set(n,[]);m.get(n).push(p)});return [...m].map(([name,products])=>({name,products}));}
 function overrides(){let raw=window.__baseSettings?.km_sale_prices,map={};try{map=typeof raw==='string'?JSON.parse(raw||'{}'):(raw||{})}catch(_){}return map}
-function comparablePrice(p,q){const map=overrides(),qty=q==null?'1':String(Number(q));for(const k of [`${p.id}:${qty}`,`${p.id}_${qty}`,`${p.id}-${qty}`,...(qty==='1'?[String(p.id)]:[])]){const n=Number(map[k]);if(Number.isFinite(n)&&n>0)return n}const n=Number(p?.sale_price_syp);return Number.isFinite(n)&&n>0?n:null}
+function comparablePrice(p,q){const qty=q==null?'1':String(Number(q)),dynamic=p?.sale_prices_syp?.[qty];const d=Number(dynamic);if(Number.isFinite(d)&&d>0)return d;const map=overrides();for(const k of [`${p.id}:${qty}`,`${p.id}_${qty}`,`${p.id}-${qty}`,...(qty==='1'?[String(p.id)]:[])]){const n=Number(map[k]);if(Number.isFinite(n)&&n>0)return n}const n=Number(p?.sale_price_syp);return Number.isFinite(n)&&n>0?n:null}
 function qtyValues(p){return TRANSFER_QTY[Number(p?.id)]||[];}
 function priceText(p,q){const n=comparablePrice(p,q);return n==null?'السعر يحدده المشرف من لوحة الإدارة':`${n.toLocaleString('ar-SY')} ل.س جديدة`}
-function packageCard(p,q){const sale=comparablePrice(p,q),usd=Number.isFinite(sale)?window.baseCardUsdEquivalentFromSyp?.(sale):null,usdLine=Number.isFinite(sale)?`<span class="package-usd" data-syp-price="${sale}">${usd?`≈ ${kmEsc(usd)}`:'جارٍ تحميل سعر الصرف…'}</span>`:'';return `<button type="button" class="package-card km-package" data-km-id="${Number(p.id)}" data-qty="${kmEsc(q??'')}" data-provider="${kmEsc(PROVIDER[Number(p.id)]||'')}"><span class="package-icon">📱</span><span class="package-name">${kmEsc(q??p.name||'باقة')} رصيد</span><span class="package-price">${priceText(p,q)}</span>${usdLine}<span class="package-check">✓</span></button>`}
+function packageCard(p,q){const sale=comparablePrice(p,q),usd=Number.isFinite(sale)?window.baseCardUsdEquivalentFromSyp?.(sale):null,usdLine=Number.isFinite(sale)?`<span class="package-usd" data-syp-price="${sale}">${usd?`≈ ${kmEsc(usd)}`:'جارٍ تحميل سعر الصرف…'}</span>`:'';return `<button type="button" class="package-card km-package" data-km-id="${Number(p.id)}" data-qty="${kmEsc(q??'')}" data-provider="${kmEsc(PROVIDER[Number(p.id)]||'')}" data-sale-price="${Number.isFinite(sale)?sale:''}"><span class="package-icon">📱</span><span class="package-name">${kmEsc(q??p.name||'باقة')} رصيد</span><span class="package-price">${priceText(p,q)}</span>${usdLine}<span class="package-check">✓</span></button>`}
 function providerCard(provider){return `<button type="button" class="game-card km-provider" data-provider="${provider}" aria-label="عرض باقات ${provider}"><span class="badge">متوفر الآن</span><h3>📱 ${provider==='MTN'?'MTN':'سيريتل'}</h3><p>باقات التحويل المباشر لـ ${provider==='MTN'?'MTN':'سيريتل'} فقط</p><span class="btn">عرض الباقات ←</span></button>`}
 function draw(){const tg=km$('#transferGrid');if(tg){const ok4=state.products.some(x=>Number(x.id)===4),ok11=state.products.some(x=>Number(x.id)===11);tg.innerHTML=(ok4?providerCard('Syriatel'):'')+(ok11?providerCard('MTN'):'')||'<div class="panel km-status error">لا توجد منتجات تحويل مدعومة حاليًا.</div>'}}
 async function submitKmOrder(p,qty,params,note,button,toastDuration=2000){
@@ -35,7 +35,9 @@ async function submitKmOrder(p,qty,params,note,button,toastDuration=2000){
   note.textContent='جارٍ إنشاء الطلب وخصم الرصيد...';
   const auth=await sb.auth.getUser(); if(auth.error||!auth.data?.user)throw Error('سجّل الدخول عبر Google أولًا قبل الشراء');
   const idempotency_key=button.dataset.orderUuid||(button.dataset.orderUuid=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`));
-  const r=await sb.functions.invoke(PROXY,{body:{action:'order',product:{id:Number(p.id),name:p.name,category_name:p.category_name,params:p.params||[]},qty:Number(qty),params,idempotency_key}});
+  const transferQuote=isTransfer(p)?comparablePrice(p,qty):null;
+  if(isTransfer(p)&&(!Number.isFinite(transferQuote)||transferQuote<=0))throw Error('سعر هذه الباقة غير مضبوط حاليًا؛ تواصل مع الدعم');
+  const r=await sb.functions.invoke(PROXY,{body:{action:'order',product:{id:Number(p.id),name:p.name,category_name:p.category_name,params:p.params||[]},qty:Number(qty),params,idempotency_key,...(isTransfer(p)?{quoted_sale_price_syp:String(transferQuote)}:{})}});
   if(r.data)window.applyWalletSnapshot?.(r.data);if(r.error){window.refreshBaseCardWallet?.(true);throw Error(r.error.message||'تعذر إنشاء الطلب')}if(r.data?.error){window.refreshBaseCardWallet?.(true);throw Error(r.data.error);}
   let state=r.data?.status||'processing'; const id=r.data?.order_id;const recent=JSON.parse(localStorage.getItem('basecard_recent_km_orders')||'[]');recent.unshift({order_number:r.data?.order_number||'',source:'kmcard',status:state,provider_status:r.data?.provider_status||state,title:kmEsc(p.category_name||'شحن الألعاب'),package_name:p.name,amount:Number(r.data?.charged_syp||0),currency:'SYP',created_at:new Date().toISOString()});localStorage.setItem('basecard_recent_km_orders',JSON.stringify(recent.filter(x=>x.order_number).slice(0,20)));window.applyWalletSnapshot?.(r.data);delete button.dataset.orderUuid;await Promise.allSettled([window.refreshBaseCardWallet?.(),window.refreshBaseCardTrack?.()]);
   const orderRef=r.data?.order_number||(toastDuration>2000?(r.data?.order_id||id||'—'):'');const successMsg=`تم إنشاء الطلب ${orderRef} — الحالة: ${state==='completed'?'مكتمل':state==='rejected'?'مرفوض وتم إرجاع الرصيد':'قيد المعالجة'}`;note.textContent=successMsg;if(typeof flashMessage==='function')flashMessage(successMsg,state==='rejected'?'error':'success',toastDuration);
@@ -48,10 +50,21 @@ async function submitKmOrder(p,qty,params,note,button,toastDuration=2000){
   }
  }catch(e){window.refreshBaseCardWallet?.(true);const msg=typeof friendlyOrderError==='function'?friendlyOrderError(e):(e.message||'تعذر تنفيذ الطلب.');note.textContent=msg;if(typeof flashMessage==='function')flashMessage(msg,'error')} finally{await window.waitForBaseCardMessagePaint?.();if(button){delete button.dataset.bcPurchaseBusy;button.disabled=false}}
 }
-function showTransfer(provider){
+async function refreshTransferCatalog(){
+ const r=await sb.functions.invoke(PROXY,{body:{action:'products'}});
+ if(r.error||r.data?.error)throw new Error('تعذر تحديث أسعار التحويل الآن');
+ const fresh=parse(r.data),byId=new Map(fresh.filter(p=>isTransfer(p)).map(p=>[Number(p.id),p]));
+ state.products=state.products.map(p=>byId.get(Number(p.id))||p);
+ for(const [id,p] of byId)if(!state.products.some(x=>Number(x.id)===id))state.products.push(p);
+ window.__kmProducts=state.products;draw();
+}
+async function showTransfer(provider){
  provider=provider==='MTN'?'MTN':'Syriatel'; state.selectedProvider=provider;
- const id=provider==='MTN'?11:4,p=state.products.find(x=>Number(x.id)===id)||{id,name:provider,params:['phone']};
+ const id=provider==='MTN'?11:4;
  let panel=km$('#transferFormPanel'); if(!panel)return;
+ panel.classList.remove('hidden','section-hidden');panel.style.display='block';panel.innerHTML='<p class="km-status">جارٍ تحديث أسعار الباقات…</p>';
+ try{await refreshTransferCatalog()}catch(_){}
+ const p=state.products.find(x=>Number(x.id)===id)||{id,name:provider,params:['phone']};
  if(!p){panel.innerHTML='<p class="km-status error">منتج التحويل غير متاح حاليًا.</p>';panel.classList.remove('hidden');return}
  const cards=qtyValues(p).map(q=>packageCard(p,q)).join(''); panel.classList.remove('hidden','section-hidden');panel.style.display='block';
  panel.innerHTML=`<h3>شراء رصيد ${kmEsc(provider)}</h3><form id="transferPurchaseForm" novalidate><label class="full">رقم الهاتف السوري *<input id="transferTarget" name="phone" inputmode="tel" required placeholder="09xxxxxxxx أو +9639xxxxxxxx"><small class="muted">مطلوب لإتمام الشراء.</small></label><p class="muted">اختر الكمية التي تريد شراءها من القائمة التالية.</p><div id="transferPackages" class="packages-grid">${cards}</div><button class="btn" type="submit">شراء وشحن الآن</button><p class="muted duplicate-order-warning" style="margin-top:12px;text-align:center;color:#f59e0b;font-weight:700">لا تضغط على زر الشراء مرتين حتى لا يتم خصم رصيد إضافي من محفظتك.</p><p id="transferFormNote" class="muted" role="status"></p></form>`;
