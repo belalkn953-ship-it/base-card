@@ -54,6 +54,9 @@
     return null;
   }
   function fastPreviewPrice(p,qty){const cached=quoteCache.get(quoteKey(p,qty));if(cached&&Date.now()-cached.at<15000)return cached.price;return localSalePrice(p,qty)}
+  function chatOrderState(value){const states=[value?.provider_status,value?.status].map(x=>String(x||'').toLowerCase()),mapped=states.map(x=>['reject','rejected','refunded'].includes(x)?'rejected':['accept','accepted','completed'].includes(x)?'completed':['wait','pending'].includes(x)?'pending':x==='processing'?'processing':'').filter(Boolean),terminal=[...new Set(mapped.filter(x=>x==='rejected'||x==='completed'))];if(terminal.length>1||terminal.length&&mapped.some(x=>x==='pending'||x==='processing'))return'processing';if(terminal.length)return terminal[0];if(mapped.includes('pending'))return'pending';return'processing'}
+  function chatOrderStateText(state){return state==='completed'?'مكتمل':state==='rejected'?'مرفوض وتم إرجاع الرصيد':state==='pending'?'قيد الانتظار':'قيد المعالجة'}
+  function chatOrderStateTone(state){return state==='completed'?'success':state==='rejected'?'error':'pending'}
   function friendly(err){
     const m=String(err?.message||err||'');
     if(/provider|مزود|رصيد.*مزود|تواصل مع الدعم/i.test(m))return 'لا يوجد رصيد كافٍ لدى مزود الشحن حاليًا، تواصل مع الدعم';
@@ -101,7 +104,7 @@
     updateQuote();
     form.addEventListener('submit',async e=>{
       e.preventDefault();if(form.dataset.submitting==='1')return;
-      form.dataset.submitting='1';btn.disabled=true;btn.textContent='جارٍ إرسال الطلب…';
+      form.dataset.submitting='1';btn.disabled=true;btn.textContent='جارٍ إرسال الطلب…';const pendingMsg='جارٍ إرسال طلبك والتحقق من حالته؛ لا تضغط مرة ثانية.';note.textContent=pendingMsg;window.flashMessage?.(pendingMsg,'pending',5000);
       try{
         if(!quoteValue||quotedQty!==numText(qty.value)){await updateQuote();return}
         const params={};form.querySelectorAll('[data-chat-param]').forEach(x=>params[x.dataset.chatParam]=x.value.trim());
@@ -110,10 +113,11 @@
         form.dataset.orderUuid||=crypto.randomUUID();
         const r=await sb.functions.invoke('kmcard-proxy',{body:{action:'order',product:{id:Number(p.id),name:p.name,category_name:p.category_name,params:p.params||[]},qty:numText(qty.value),params,quoted_sale_price_syp:quoteValue,idempotency_key:form.dataset.orderUuid}});
         if(r.data)window.applyWalletSnapshot?.(r.data);if(r.error){window.refreshBaseCardWallet?.(true);let detail=r.data?.error||'';try{detail ||= (await r.error.context?.clone?.().json())?.error||''}catch(_){}throw new Error(detail||r.error.message||'تعذر تنفيذ الطلب')}if(r.data?.error){window.refreshBaseCardWallet?.(true);throw new Error(r.data.error)}
-        const number=r.data.order_number||r.data.order_id||'—';const status=r.data.status==='completed'?'مكتمل':r.data.status==='rejected'?'مرفوض وتم إرجاع الرصيد':'قيد المعالجة';
-        const msg=`تم إنشاء الطلب ${number} — الحالة: ${status}`;note.textContent=msg;window.flashMessage?.(msg,r.data.status==='rejected'?'error':'success',5000);
-        const recent=JSON.parse(localStorage.getItem('basecard_recent_km_orders')||'[]');recent.unshift({order_number:r.data.order_number||'',source:'kmcard',status:r.data.status||'processing',provider_status:r.data.provider_status||'wait',title:p.category_name||'خدمات الدردشة',package_name:p.name,amount:String(r.data.charged_syp??quoteValue),currency:'SYP',created_at:new Date().toISOString()});localStorage.setItem('basecard_recent_km_orders',JSON.stringify(recent.filter(x=>x.order_number).slice(0,30)));
-        window.applyWalletSnapshot?.(r.data);delete form.dataset.orderUuid;await Promise.allSettled([window.refreshBaseCardWallet?.(),window.refreshBaseCardTrack?.()]);
+        const number=r.data.order_number||r.data.order_id||'—';let state=chatOrderState(r.data);
+        const msg=`تم استلام الطلب ${number} — الحالة: ${chatOrderStateText(state)}`;note.textContent=msg;window.flashMessage?.(msg,chatOrderStateTone(state),5000);
+        const recent=JSON.parse(localStorage.getItem('basecard_recent_km_orders')||'[]');recent.unshift({order_number:r.data.order_number||'',source:'kmcard',status:state,provider_status:r.data.provider_status||r.data.status||state,title:p.category_name||'خدمات الدردشة',package_name:p.name,amount:String(r.data.charged_syp??quoteValue),currency:'SYP',created_at:new Date().toISOString()});localStorage.setItem('basecard_recent_km_orders',JSON.stringify(recent.filter(x=>x.order_number).slice(0,30)));
+        window.applyWalletSnapshot?.(r.data);if(state==='completed'||state==='rejected')delete form.dataset.orderUuid;void Promise.allSettled([window.refreshBaseCardWallet?.(),window.refreshBaseCardTrack?.()]);
+        if(r.data.order_id&&state!=='completed'&&state!=='rejected')for(let i=0;i<8;i++){await new Promise(resolve=>setTimeout(resolve,3000));let check;try{check=await sb.functions.invoke('kmcard-proxy',{body:{action:'check',id:r.data.order_id}})}catch(_){break}if(check.error||check.data?.error)break;try{const next=chatOrderState(check.data);if(next!==state){state=next;const update=`الطلب ${r.data.order_number||number} — الحالة: ${chatOrderStateText(state)}`;note.textContent=update;window.flashMessage?.(update,chatOrderStateTone(state),5000);const rows=JSON.parse(localStorage.getItem('basecard_recent_km_orders')||'[]'),index=rows.findIndex(x=>x.order_number===r.data.order_number);if(index>=0){rows[index].status=state;rows[index].provider_status=check.data.provider_status||check.data.status||state;localStorage.setItem('basecard_recent_km_orders',JSON.stringify(rows))}if(state==='rejected'){delete form.dataset.orderUuid;await window.refreshBaseCardWallet?.(true)}}if(state==='completed'||state==='rejected')break}catch(_){break}}
       }catch(e){window.refreshBaseCardWallet?.(true);const msg=friendly(e);note.textContent=msg;window.flashMessage?.(msg,'error');if(/تغيّر السعر|تغير السعر/i.test(String(e.message||''))){total.textContent='جارٍ تحديث السعر النهائي…';scheduleQuote()}}
       finally{await window.waitForBaseCardMessagePaint?.();delete form.dataset.submitting;btn.disabled=!quoteValue||p.available===false;btn.textContent='شراء وشحن'}
     });
