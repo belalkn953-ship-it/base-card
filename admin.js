@@ -72,14 +72,15 @@ async function loadPackages(){
 async function loadTransferPrices(){
   const sel=$('#transferPriceProvider'),box=$('#transferPricesTable'),info=$('#transferPricesInfo');if(!sel||!box||!info)return;const provider=sel.value;
   if(!provider){box.innerHTML='';info.textContent='اختر سيريتل أو MTN لعرض باقات الشركة وحدها.';return}
-  const providerName=provider==='4'?'سيريتل':'MTN';box.innerHTML='<div class="empty">جارٍ تحميل باقات '+providerName+'…</div>';info.textContent='تعرض هذه القائمة الباقات المضبوطة فقط؛ حفظ السعر يعيد ضبط نقطة المقارنة الحالية دون تغيير الكمية.';
+  const providerName=provider==='4'?'سيريتل':'MTN';box.innerHTML='<div class="empty">جارٍ تحميل أسعار '+providerName+'…</div>';info.textContent='تُحمّل الأسعار المحفوظة مباشرة؛ حفظ السعر يعيد ضبط أساس المزامنة دون تغيير الكمية.';
   try{
-    const r=await sb.functions.invoke('kmcard-proxy',{body:{action:'admin_transfer_price_list'}});
-    if(r.error||r.data?.error){box.innerHTML='<div class="alert error">تعذر تحميل الأسعار. لم يتم تغيير أي سعر.</div>';return}
-    const rows=(r.data?.products||[]).filter(x=>Number(x.id)===Number(provider)).sort((a,b)=>Number(a.quantity)-Number(b.quantity));
+    const r=await sb.from('settings').select('value').eq('key','km_sale_prices').maybeSingle();
+    if(r.error){box.innerHTML='<div class="alert error">تعذر قراءة أسعار '+providerName+'. تحقق من الاتصال وجلسة الإدارة؛ لم يتغير أي سعر.</div>';return}
+    let prices={};try{prices=typeof r.data?.value==='string'?JSON.parse(r.data.value||'{}'):(r.data?.value||{})}catch(_){box.innerHTML='<div class="alert error">تعذر قراءة قائمة الأسعار؛ لم يتغير أي سعر.</div>';return}
+    const rows=Object.entries(prices).filter(([key,value])=>key.startsWith(provider+':')&&Number.isFinite(Number(value))&&Number(value)>0).map(([key,value])=>({id:Number(provider),quantity:key.slice(provider.length+1),price:Number(value)})).sort((a,b)=>Number(a.quantity)-Number(b.quantity));
     if(!rows.length){box.innerHTML='<div class="empty">لا توجد باقات مضبوطة لهذه الشركة.</div>';return}
-    box.innerHTML=`<table class="data-table"><thead><tr><th>كمية الرصيد</th><th>سعر البيع (ل.س جديدة)</th><th>حفظ</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.quantity)} رصيد</td><td><input class="transfer-admin-price" type="number" min="0.01" step="0.01" value="${esc(x.base_sale_price_syp)}" aria-label="سعر ${esc(x.quantity)} رصيد"></td><td><button class="mini-btn save-transfer-price" type="button" data-product-id="${Number(x.id)}" data-quantity="${esc(x.quantity)}">حفظ السعر</button></td></tr>`).join('')}</tbody></table>`;
-  }catch(_){box.innerHTML='<div class="alert error">تعذر الاتصال لتحميل باقات '+providerName+'. أعد المحاولة.</div>'}
+    box.innerHTML=`<table class="data-table"><thead><tr><th>كمية الرصيد</th><th>سعر البيع (ل.س جديدة)</th><th>حفظ</th></tr></thead><tbody>${rows.map(x=>`<tr><td>${esc(x.quantity)} رصيد</td><td><input class="transfer-admin-price" type="number" min="0.01" step="0.01" value="${esc(x.price)}" aria-label="سعر ${esc(x.quantity)} رصيد"></td><td><button class="mini-btn save-transfer-price" type="button" data-product-id="${x.id}" data-quantity="${esc(x.quantity)}">حفظ السعر</button></td></tr>`).join('')}</tbody></table>`;
+  }catch(_){box.innerHTML='<div class="alert error">تعذر قراءة أسعار '+providerName+'. أعد المحاولة؛ لم يتغير أي سعر.</div>'}
 }
 $('#transferPriceProvider')?.addEventListener('change',loadTransferPrices);$('#refreshTransferPrices')?.addEventListener('click',loadTransferPrices);document.addEventListener('click',async e=>{
   const b=e.target.closest('.save-transfer-price');if(!b)return;

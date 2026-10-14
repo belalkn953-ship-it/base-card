@@ -50,25 +50,37 @@ async function submitKmOrder(p,qty,params,note,button,toastDuration=2000){
   }
  }catch(e){window.refreshBaseCardWallet?.(true);const msg=typeof friendlyOrderError==='function'?friendlyOrderError(e):(e.message||'تعذر تنفيذ الطلب.');note.textContent=msg;if(typeof flashMessage==='function')flashMessage(msg,'error')} finally{await window.waitForBaseCardMessagePaint?.();if(button){delete button.dataset.bcPurchaseBusy;button.disabled=false}}
 }
+let transferCatalogRefresh=null;
 async function refreshTransferCatalog(){
- const r=await sb.functions.invoke(PROXY,{body:{action:'products'}});
- if(r.error||r.data?.error)throw new Error('تعذر تحديث أسعار التحويل الآن');
- const fresh=parse(r.data),byId=new Map(fresh.filter(p=>isTransfer(p)).map(p=>[Number(p.id),p]));
- state.products=state.products.map(p=>byId.get(Number(p.id))||p);
- for(const [id,p] of byId)if(!state.products.some(x=>Number(x.id)===id))state.products.push(p);
- window.__kmProducts=state.products;draw();
+ if(transferCatalogRefresh)return transferCatalogRefresh;
+ const task=(async()=>{
+  const r=await sb.functions.invoke(PROXY,{body:{action:'products'}});
+  if(r.error||r.data?.error)throw new Error('تعذر تحديث أسعار التحويل الآن');
+  const fresh=parse(r.data),byId=new Map(fresh.filter(p=>isTransfer(p)).map(p=>[Number(p.id),p]));
+  state.products=state.products.map(p=>byId.get(Number(p.id))||p);
+  for(const [id,p] of byId)if(!state.products.some(x=>Number(x.id)===id))state.products.push(p);
+  window.__kmProducts=state.products;draw();
+  const grid=km$('#transferPackages');
+  if(grid&&state.selectedProvider){
+   const id=state.selectedProvider==='MTN'?11:4,p=state.products.find(x=>Number(x.id)===id);
+   if(p){const selected=grid.querySelector('.km-package.selected')?.dataset.qty;grid.innerHTML=qtyValues(p).map(q=>packageCard(p,q)).join('');if(selected){const match=[...grid.querySelectorAll('.km-package')].find(x=>x.dataset.qty===selected);match?.classList.add('selected')}}
+  }
+ })();
+ transferCatalogRefresh=task;
+ try{return await task}finally{if(transferCatalogRefresh===task)transferCatalogRefresh=null}
 }
-async function showTransfer(provider){
+function showTransfer(provider){
  provider=provider==='MTN'?'MTN':'Syriatel'; state.selectedProvider=provider;
  const id=provider==='MTN'?11:4;
- let panel=km$('#transferFormPanel'); if(!panel)return;
- panel.classList.remove('hidden','section-hidden');panel.style.display='block';panel.innerHTML='<p class="km-status">جارٍ تحديث أسعار الباقات…</p>';
- try{await refreshTransferCatalog()}catch(_){}
- const p=state.products.find(x=>Number(x.id)===id)||{id,name:provider,params:['phone']};
- if(!p){panel.innerHTML='<p class="km-status error">منتج التحويل غير متاح حاليًا.</p>';panel.classList.remove('hidden');return}
- const cards=qtyValues(p).map(q=>packageCard(p,q)).join(''); panel.classList.remove('hidden','section-hidden');panel.style.display='block';
+ const panel=km$('#transferFormPanel'); if(!panel)return;
+ const p=state.products.find(x=>Number(x.id)===id)||{id,name:provider,category_name:provider,params:['رقم الهاتف']};
+ panel.classList.remove('hidden','section-hidden');panel.style.display='block';
+ const cards=qtyValues(p).map(q=>packageCard(p,q)).join('');
  panel.innerHTML=`<h3>شراء رصيد ${kmEsc(provider)}</h3><form id="transferPurchaseForm" novalidate><label class="full">رقم الهاتف السوري *<input id="transferTarget" name="phone" inputmode="tel" required placeholder="09xxxxxxxx أو +9639xxxxxxxx"><small class="muted">مطلوب لإتمام الشراء.</small></label><p class="muted">اختر الكمية التي تريد شراءها من القائمة التالية.</p><div id="transferPackages" class="packages-grid">${cards}</div><button class="btn" type="submit">شراء وشحن الآن</button><p class="muted duplicate-order-warning" style="margin-top:12px;text-align:center;color:#f59e0b;font-weight:700">لا تضغط على زر الشراء مرتين حتى لا يتم خصم رصيد إضافي من محفظتك.</p><p id="transferFormNote" class="muted" role="status"></p></form>`;
- const form=km$('#transferPurchaseForm');form.addEventListener('input',()=>delete form.querySelector('button[type=submit]')?.dataset.orderUuid);form.addEventListener('change',()=>delete form.querySelector('button[type=submit]')?.dataset.orderUuid);form.addEventListener('submit',async e=>{e.preventDefault();if(form.dataset.submitting==='1')return;form.dataset.submitting='1';const button=e.target.querySelector('button[type=submit]');button.disabled=true;const phone=km$('#transferTarget').value.trim(),note=km$('#transferFormNote'),sel=form.querySelector('.km-package.selected');try{if(!/^(?:0?9|\+?963|00963)9?\d{8}$/.test(phone.replace(/[\s-]/g,''))){note.textContent='أدخل رقمًا سوريًا صحيحًا مثل 09xxxxxxxx.';return}if(!sel){note.textContent='اختر كمية أولًا.';return}const key=String(p.params?.[0]||'رقم الهاتف');await submitKmOrder(p,sel.dataset.qty,{[key]:phone},note,button)}finally{await window.waitForBaseCardMessagePaint?.();delete form.dataset.submitting;button.disabled=false}});panel.scrollIntoView({behavior:'smooth',block:'start'});
+ const form=km$('#transferPurchaseForm');form.addEventListener('input',()=>delete form.querySelector('button[type=submit]')?.dataset.orderUuid);form.addEventListener('change',()=>delete form.querySelector('button[type=submit]')?.dataset.orderUuid);form.addEventListener('submit',async e=>{e.preventDefault();if(form.dataset.submitting==='1')return;form.dataset.submitting='1';const button=e.target.querySelector('button[type=submit]');button.disabled=true;const phone=km$('#transferTarget').value.trim(),note=km$('#transferFormNote'),sel=form.querySelector('.km-package.selected');try{if(!/^(?:0?9|\+?963|00963)9?\d{8}$/.test(phone.replace(/[\s-]/g,''))){note.textContent='أدخل رقمًا سوريًا صحيحًا مثل 09xxxxxxxx.';return}if(!sel){note.textContent='اختر كمية أولًا.';return}const current=state.products.find(x=>Number(x.id)===id)||p,key=String(current.params?.[0]||'رقم الهاتف');await submitKmOrder(current,sel.dataset.qty,{[key]:phone},note,button)}finally{await window.waitForBaseCardMessagePaint?.();delete form.dataset.submitting;button.disabled=false}});
+ panel.scrollIntoView({behavior:'smooth',block:'start'});
+ // Render the cached packages immediately, then refresh supplier prices without blocking the customer.
+ refreshTransferCatalog().catch(()=>{});
 }
 window.__openBaseCardTransfer=showTransfer;
 function showChat(g){

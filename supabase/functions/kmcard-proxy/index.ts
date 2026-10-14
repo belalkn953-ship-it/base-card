@@ -102,6 +102,15 @@ function calculateChatSale(unitCost, quantity){
   const numerator=cost*qty*CHAT_MARGIN_NUM, denominator=CHAT_COST_SCALE*CHAT_QTY_SCALE*CHAT_MARGIN_DEN;
   return ((numerator+denominator-1n)/denominator).toString();
 }
+function formatChatUnitPrice(value){
+  const whole=(value/CHAT_COST_SCALE).toString(),fraction=(value%CHAT_COST_SCALE).toString().padStart(18,'0').replace(/0+$/,'');
+  return fraction?`${whole}.${fraction}`:whole;
+}
+function calculateChatUnitSale(baseUnit,baselineCost,currentCost){
+  const sale=scaledBigInt(baseUnit,18)+scaledBigInt(currentCost,18)-scaledBigInt(baselineCost,18);
+  if(sale<=0n)throw new Error('invalid chat unit price');
+  return formatChatUnitPrice(sale);
+}
 const SECRET_PARAM_KEY='__basecard_encrypted_params_v1';
 function isSensitiveParam(k){return /(password|passcode|e-?mail|ايميل|البريد|account|user\s*name|username|secondary\s*auth|verification\s*code|otp|الحساب|اسم\s*المستخدم|كلمة\s*المرور|رمز\s*(سري|التحقق|المصادقة))/i.test(String(k));}
 function bytesToBase64(bytes){let binary='';for(const b of bytes)binary+=String.fromCharCode(b);return btoa(binary);}
@@ -356,14 +365,19 @@ Deno.serve(async (req)=>{
       return json({ok:true,base_sale_price_syp:String(sale)},200,req);
     }
     if (action === 'products') {
-      const rows=await getProducts(true);await ensureChatAnchors(rows);const dynamicGamePrices=await gameSaleMaps(rows),dynamicTransferPrices=await transferSaleMaps(rows);
+      const rows=await getProducts(true),chatAnchors=await ensureChatAnchors(rows);const dynamicGamePrices=await gameSaleMaps(rows),dynamicTransferPrices=await transferSaleMaps(rows);
+      const chatAnchorMap=new Map(chatAnchors.map(a=>[Number(a.product_id),a]));
       const safeFields=['id','name','available','category_name','parent_id','params','product_type','qty_values'];
       const products=rows.filter(p=>PUBLIC_PRODUCT_IDS.has(Number(p.id))||isChatCatalogProduct(p)).map((p)=>{
         const safe=Object.fromEntries(safeFields.filter((k)=>p[k]!==undefined).map((k)=>[k,p[k]]));
         const id=Number(p.id),prices=dynamicGamePrices.get(id),transferPrices=dynamicTransferPrices.get(id);
         if(prices){safe.sale_prices_syp=prices;if(prices['1']!==undefined)safe.sale_price_syp=prices['1'];}
         if(transferPrices){safe.sale_prices_syp=transferPrices;}
-        if(hasForbiddenCredentialParams(p)){safe.available=false;safe.params=[];}
+        if(isChatCatalogProduct(p)&&providerProductAllowed(p)&&p.available!==false&&Number(p.price)>0){
+          const anchor=chatAnchorMap.get(id);
+          if(anchor){try{safe.sale_unit_price_syp=calculateChatUnitSale(anchor.base_sale_price_syp,anchor.provider_cost_syp,p.price)}catch(_){}}
+        }
+        if(hasForbiddenCredentialParams(p)){safe.available=false;safe.params=[];delete safe.sale_unit_price_syp;}
         return safe;
       });
       return json({products});

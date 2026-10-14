@@ -35,8 +35,19 @@
     try{return BigInt(String(value)).toLocaleString('ar-SY')}catch(_){return String(value)}
   }
   function quoteKey(p,qty){return `${Number(p?.id)}:${String(numText(qty))}`}
+  function scaledDecimal(value,places){
+    const m=String(numText(value)).match(/^(\d+)(?:\.(\d*))?$/);if(!m)return null;
+    const scale=10n**BigInt(places),whole=BigInt(m[1]);let fraction=m[2]||'';
+    if(fraction.length>places){const kept=fraction.slice(0,places);let out=whole*scale+BigInt(kept||'0');if(/[1-9]/.test(fraction.slice(places)))out++;return out}
+    return whole*scale+BigInt(fraction.padEnd(places,'0')||'0');
+  }
+  function estimateUnitTotal(unitPrice,quantity){
+    try{const unit=scaledDecimal(unitPrice,18),qty=scaledDecimal(quantity,6);if(unit===null||qty===null||unit<=0n||qty<=0n)return null;const divisor=10n**24n;return ((unit*qty+divisor-1n)/divisor).toString()}catch(_){return null}
+  }
   function localSalePrice(p,qty){
-    const q=String(numText(qty)),nq=Number(q);let productValue=p?.sale_prices_syp?.[q]??(nq===1?p?.sale_price_syp:undefined);
+    const q=String(numText(qty)),nq=Number(q);const unit=p?.sale_unit_price_syp;
+    if(unit!==undefined&&unit!==null&&unit!==''){const estimate=estimateUnitTotal(unit,q);if(estimate!==null)return estimate}
+    let productValue=p?.sale_prices_syp?.[q]??(nq===1?p?.sale_price_syp:undefined);
     if(productValue!==undefined&&productValue!==null&&productValue!==''){const n=Number(productValue);if(Number.isFinite(n)&&n>0)return n}
     let map={};try{const raw=window.__baseSettings?.km_sale_prices;map=typeof raw==='string'?JSON.parse(raw||'{}'):(raw||{})}catch(_){}
     for(const key of [`${Number(p?.id)}:${q}`,`${Number(p?.id)}_${q}`,`${Number(p?.id)}-${q}`,...(nq===1?[String(Number(p?.id))]:[])]){const n=Number(map[key]);if(Number.isFinite(n)&&n>0)return n}
