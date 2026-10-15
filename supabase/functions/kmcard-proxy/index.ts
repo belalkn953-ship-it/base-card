@@ -258,6 +258,27 @@ Deno.serve(async (req)=>{
     }
     return out;
   };
+  const isFreeFirePriceProduct=p=>/^FREE FIRE GLOBAL$/i.test(String(p?.category_name||'').trim())&&APPROVED_FREE_FIRE_IDS.has(Number(p?.id));
+  const readUsdSaleMap=async()=>{
+    const {data,error}=await admin.from('settings').select('value').eq('key','km_sale_prices_usd').maybeSingle();
+    if(error)throw error;try{return typeof data?.value==='string'?JSON.parse(data.value||'{}'):(data?.value||{})}catch(_){throw new Error('تعذر قراءة أسعار الدولار')}
+  };
+  const gameUsdSaleMaps=async(rows)=>{
+    const saved=await readUsdSaleMap(),products=(rows||[]).filter(p=>isFreeFirePriceProduct(p)&&p.available!==false&&Number(p.price)>0),byId=new Map(products.map(p=>[Number(p.id),p])),items=[];
+    for(const [key,value] of Object.entries(saved||{})){
+      const [idText,qtyText,...extra]=String(key).split(':'),id=Number(idText),p=byId.get(id),quantity=normalizePriceQty(qtyText);
+      if(extra.length||!/^[0-9]+$/.test(idText)||!p||quantity!=='1'||!Number.isFinite(Number(value))||Number(value)<=0)continue;
+      items.push({product_id:id,quantity:1,provider_cost_usd:String(p.price)});
+    }
+    if(items.length){const {error}=await admin.rpc('service_sync_km_usd_game_prices',{p_items:items});if(error)throw new Error('تعذر تحديث أسعار الدولار؛ لم يتغير أي سعر')}
+    const current=await readUsdSaleMap(),out=new Map();
+    for(const [key,value] of Object.entries(current||{})){
+      const [idText,qtyText,...extra]=String(key).split(':'),id=Number(idText),quantity=normalizePriceQty(qtyText);
+      if(extra.length||!/^[0-9]+$/.test(idText)||!APPROVED_FREE_FIRE_IDS.has(id)||quantity!=='1'||!Number.isFinite(Number(value))||Number(value)<=0)continue;
+      const prices=out.get(id)||{};prices['1']=Number(value);out.set(id,prices);
+    }
+    return out;
+  };
   // Sync only denominations already configured in km_sale_prices; supplier costs
   // stay in the service-only anchor table and never enter the public response.
   const transferSaleMaps=async(rows)=>{
@@ -356,6 +377,20 @@ Deno.serve(async (req)=>{
       if(saved.error)return json({error:'تعذر حفظ السعر الأساسي'},500,req);
       return json({ok:true,base_sale_price_syp:String(sale)},200,req);
     }
+    if(action==='admin_game_usd_price_list'){
+      const gate=await requireAdmin();if(!gate.ok)return json({error:gate.error},gate.status,req);
+      const rows=await getProducts(true),prices=await gameUsdSaleMaps(rows),saved=await readUsdSaleMap(),byId=new Map(rows.filter(isFreeFirePriceProduct).map(p=>[Number(p.id),p]));
+      const products=[...APPROVED_FREE_FIRE_IDS].sort((a,b)=>a-b).map(id=>{const p=byId.get(id),value=prices.get(id)?.['1']??saved[`${id}:1`]??'';return{id,name:String(p?.name||`Free Fire ${id}`),available:p?.available!==false,base_sale_price_usd:value===undefined?'':String(value)}});
+      return json({products},200,req);
+    }
+    if(action==='admin_set_game_price_usd'){
+      const gate=await requireAdmin();if(!gate.ok)return json({error:gate.error},gate.status,req);
+      const productId=Number(body.product_id),sale=Number(body.base_sale_price_usd),rows=await getProducts(true),p=rows.find(x=>Number(x.id)===productId&&isFreeFirePriceProduct(x)&&x.available!==false);
+      if(!p||!Number(p.price)||!Number.isFinite(sale)||sale<=0||sale>1000000000000)return json({error:'أدخل سعرًا صحيحًا بالدولار لباقة فري فاير'},400,req);
+      const saved=await admin.rpc('service_set_km_usd_price_anchor',{p_product_id:productId,p_base_sale_price_usd:sale,p_provider_cost_usd:Number(p.price)});
+      if(saved.error)return json({error:'تعذر حفظ سعر الدولار الأساسي؛ لم يتغير أي سعر'},500,req);
+      return json({ok:true,base_sale_price_usd:String(sale)},200,req);
+    }
     if(action==='admin_set_game_price'){
       const gate=await requireAdmin();if(!gate.ok)return json({error:gate.error},gate.status,req);
       const productId=Number(body.product_id),quantity=normalizeDigits(body.quantity??1),sale=Number(body.base_sale_price_syp),rows=await getProducts(true),p=rows.find(x=>Number(x.id)===productId&&providerProductAllowed(x)&&isGamePriceProduct(x));
@@ -365,13 +400,14 @@ Deno.serve(async (req)=>{
       return json({ok:true,base_sale_price_syp:String(sale)},200,req);
     }
     if (action === 'products') {
-      const rows=await getProducts(true),chatAnchors=await ensureChatAnchors(rows);const dynamicGamePrices=await gameSaleMaps(rows),dynamicTransferPrices=await transferSaleMaps(rows);
+      const rows=await getProducts(true),chatAnchors=await ensureChatAnchors(rows);const dynamicGamePrices=await gameSaleMaps(rows),dynamicGamePricesUsd=await gameUsdSaleMaps(rows),dynamicTransferPrices=await transferSaleMaps(rows);
       const chatAnchorMap=new Map(chatAnchors.map(a=>[Number(a.product_id),a]));
       const safeFields=['id','name','available','category_name','parent_id','params','product_type','qty_values'];
       const products=rows.filter(p=>PUBLIC_PRODUCT_IDS.has(Number(p.id))||isChatCatalogProduct(p)).map((p)=>{
         const safe=Object.fromEntries(safeFields.filter((k)=>p[k]!==undefined).map((k)=>[k,p[k]]));
-        const id=Number(p.id),prices=dynamicGamePrices.get(id),transferPrices=dynamicTransferPrices.get(id);
+        const id=Number(p.id),prices=dynamicGamePrices.get(id),usdPrices=dynamicGamePricesUsd.get(id),transferPrices=dynamicTransferPrices.get(id);
         if(prices){safe.sale_prices_syp=prices;if(prices['1']!==undefined)safe.sale_price_syp=prices['1'];}
+        if(usdPrices){safe.sale_prices_usd=usdPrices;if(usdPrices['1']!==undefined)safe.sale_price_usd=usdPrices['1'];}
         if(transferPrices){safe.sale_prices_syp=transferPrices;}
         if(isChatCatalogProduct(p)&&providerProductAllowed(p)&&p.available!==false&&Number(p.price)>0){
           const anchor=chatAnchorMap.get(id);
