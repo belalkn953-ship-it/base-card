@@ -104,7 +104,7 @@
     updateQuote();
     form.addEventListener('submit',async e=>{
       e.preventDefault();if(form.dataset.submitting==='1')return;
-      form.dataset.submitting='1';btn.disabled=true;btn.textContent='جارٍ إرسال الطلب…';const pendingMsg='جارٍ إرسال طلبك والتحقق من حالته؛ لا تضغط مرة ثانية.';note.textContent=pendingMsg;window.flashMessage?.(pendingMsg,'pending',5000);
+      form.dataset.submitting='1';btn.disabled=true;note.textContent='';
       try{
         if(!quoteValue||quotedQty!==numText(qty.value)){await updateQuote();return}
         const params={};form.querySelectorAll('[data-chat-param]').forEach(x=>params[x.dataset.chatParam]=x.value.trim());

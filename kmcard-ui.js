@@ -35,7 +35,7 @@ async function submitKmOrder(p,qty,params,note,button,toastDuration=5000){
  if(button){button.dataset.bcPurchaseBusy='1';button.disabled=true}
  try{
   if(!p||!p.id)throw Error('الباقة غير متاحة حاليًا.');
-  const pendingMsg='جارٍ إرسال طلبك والتحقق من حالته؛ لا تضغط مرة ثانية.';note.textContent=pendingMsg;if(typeof flashMessage==='function')flashMessage(pendingMsg,'pending',5000);
+  note.textContent='';
   const auth=await sb.auth.getUser(); if(auth.error||!auth.data?.user)throw Error('سجّل الدخول عبر Google أولًا قبل الشراء');
   const idempotency_key=button.dataset.orderUuid||(button.dataset.orderUuid=(globalThis.crypto?.randomUUID?.()||`${Date.now()}-${Math.random()}`));
   const transferQuote=isTransfer(p)?comparablePrice(p,qty):null;

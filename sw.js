@@ -1,9 +1,9 @@
-const CACHE_NAME='base-card-offline-v38';
+const CACHE_NAME='base-card-offline-v39';
 const APP_SHELL=[
-  './','./index.html','./styles.css?v=52','./app.js?v=169',
+  './','./index.html','./styles.css?v=54','./app.js?v=176',
   './supabase-config.js','./km-game-catalog.js?v=4','./km-images.js?v=5','./my-payments.js?v=3',
-  './account-security.js?v=6','./chatapps-fix-v6.js?v=31','./kmcard-ui.js?v=45',
-  './transfer-fallback.js?v=9','./manifest.webmanifest?v=2','./icon-192.png?v=2','./icon-512.png?v=2','./icon-192-maskable.png?v=2','./icon-512-maskable.png?v=2'
+  './account-security.js?v=6','./chatapps-fix-v6.js?v=35','./kmcard-ui.js?v=50',
+  './transfer-fallback.js?v=14','./manifest.webmanifest?v=2','./icon-192.png?v=2','./icon-512.png?v=2','./icon-192-maskable.png?v=2','./icon-512-maskable.png?v=2'
 ];
 const INDEX_URL=new URL('./index.html',self.registration.scope).href;
 self.addEventListener('install',event=>{
