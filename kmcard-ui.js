@@ -44,17 +44,17 @@ async function submitKmOrder(p,qty,params,note,button,toastDuration=5000){
   if(r.data)window.applyWalletSnapshot?.(r.data);if(r.error){window.refreshBaseCardWallet?.(true);throw Error(r.error.message||'تعذر إنشاء الطلب')}if(r.data?.error){window.refreshBaseCardWallet?.(true);throw Error(r.data.error);}
   let state=kmResultState(r.data);const id=r.data?.order_id,orderRef=r.data?.order_number||(toastDuration>2000?(r.data?.order_id||id||'—'):'—');
   const recent=JSON.parse(localStorage.getItem('basecard_recent_km_orders')||'[]');recent.unshift({order_number:r.data?.order_number||'',source:'kmcard',status:state,provider_status:r.data?.provider_status||r.data?.status||state,title:kmEsc(p.category_name||'شحن الألعاب'),package_name:p.name,amount:Number(r.data?.charged_syp||0),currency:'SYP',created_at:new Date().toISOString()});localStorage.setItem('basecard_recent_km_orders',JSON.stringify(recent.filter(x=>x.order_number).slice(0,20)));window.applyWalletSnapshot?.(r.data);
-  const firstMsg=`تم استلام الطلب ${orderRef} — الحالة: ${kmStateText(state)}`;note.textContent=firstMsg;if(typeof flashMessage==='function')flashMessage(firstMsg,kmStateTone(state),toastDuration);
+  window.baseCardOrderNotice?.(state,toastDuration);note.textContent='';
   if(state==='completed'||state==='rejected')delete button.dataset.orderUuid;
   void Promise.allSettled([window.refreshBaseCardWallet?.(),window.refreshBaseCardTrack?.()]);
   // Poll only this user's order; check is authenticated and refund is server-side/idempotent.
   if(id&&state!=='completed'&&state!=='rejected') for(let i=0;i<8;i++){
     await new Promise(res=>setTimeout(res,3000));
     let c;try{c=await sb.functions.invoke(PROXY,{body:{action:'check',id}})}catch(_){break}if(c.error||c.data?.error)break;
-    try{state=kmResultState(c.data);const updateMsg=`الطلب ${r.data?.order_number||orderRef} — الحالة: ${kmStateText(state)}`;note.textContent=updateMsg;if(typeof flashMessage==='function')flashMessage(updateMsg,kmStateTone(state),toastDuration);
+    try{const previousState=state;state=kmResultState(c.data);if(state!==previousState&&(state==='completed'||state==='rejected'))window.baseCardOrderNotice?.(state,toastDuration);
     if(state==='rejected'){delete button.dataset.orderUuid;void window.refreshBaseCardWallet?.(true)}if(state==='completed'||state==='rejected')break}catch(_){break}
   }
- }catch(e){window.refreshBaseCardWallet?.(true);const msg=typeof friendlyOrderError==='function'?friendlyOrderError(e):(e.message||'تعذر تنفيذ الطلب.');note.textContent=msg;if(typeof flashMessage==='function')flashMessage(msg,'error',toastDuration)} finally{await window.waitForBaseCardMessagePaint?.();if(button){delete button.dataset.bcPurchaseBusy;button.disabled=false}}
+ }catch(e){window.refreshBaseCardWallet?.(true);const msg=typeof friendlyOrderError==='function'?friendlyOrderError(e):(e.message||'تعذر تنفيذ الطلب.');note.textContent='';if(typeof flashMessage==='function')flashMessage(msg,'error',toastDuration)} finally{await window.waitForBaseCardMessagePaint?.();if(button){delete button.dataset.bcPurchaseBusy;button.disabled=false}}
 }
 let transferCatalogRefresh=null;
 async function refreshTransferCatalog(){
